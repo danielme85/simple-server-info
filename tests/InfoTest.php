@@ -70,6 +70,7 @@ final class InfoTest extends TestCase
      */
     public function testMemoryUsageAndLoad() {
         $this->assertNotEmpty(Info::get()->memoryUsage());
+        $this->assertNotEmpty(Info::get()->memoryUsage(false));
         $memoryload = Info::get()->memoryLoad(0);
         $this->assertGreaterThan(0, $memoryload['load']);
     }

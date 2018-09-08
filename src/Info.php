@@ -180,24 +180,39 @@ class Info
 
     /**
      * Get Memory usage information
-     *
+     * @param bool $formatSizes set to false if you want bytes returned instead of formatted sizes.
      * @return array
      */
-    public function memoryUsage() : array
+    public function memoryUsage($formatSizes = true) : array
     {
         $memory = $this->getProcMemInfo();
         if (!empty($memory)) {
-            return [
-                'total' => Helpers::formatBytes($memory['MemTotal']),
-                'free' => Helpers::formatBytes($memory['MemFree']),
-                'available' => Helpers::formatBytes($memory['MemAvailable']),
-                'used' => Helpers::formatBytes($memory['MemTotal']-$memory['MemAvailable']),
-                'cached' => Helpers::formatBytes($memory['Cached']),
-                'active' => Helpers::formatBytes($memory['Active']),
-                'inactive' => Helpers::formatBytes($memory['Inactive']),
-                'swap_total' => Helpers::formatBytes($memory['SwapTotal']),
-                'swap_free' => Helpers::formatBytes($memory['SwapFree'])
-            ];
+            if ($formatSizes) {
+                return [
+                    'total' => self::formatBytes($memory['MemTotal']),
+                    'free' => self::formatBytes($memory['MemFree']),
+                    'available' => self::formatBytes($memory['MemAvailable']),
+                    'used' => self::formatBytes($memory['MemTotal']-$memory['MemAvailable']),
+                    'cached' => self::formatBytes($memory['Cached']),
+                    'active' => self::formatBytes($memory['Active']),
+                    'inactive' => self::formatBytes($memory['Inactive']),
+                    'swap_total' => self::formatBytes($memory['SwapTotal']),
+                    'swap_free' => self::formatBytes($memory['SwapFree'])
+                ];
+            }
+            else {
+                return [
+                    'total' => $memory['MemTotal'],
+                    'free' => $memory['MemFree'],
+                    'available' => $memory['MemAvailable'],
+                    'used' => $memory['MemTotal']-$memory['MemAvailable'],
+                    'cached' => $memory['Cached'],
+                    'active' => $memory['Active'],
+                    'inactive' => $memory['Inactive'],
+                    'swap_total' => $memory['SwapTotal'],
+                    'swap_free' => $memory['SwapFree']
+                ];
+            }
         }
         return [];
     }
@@ -221,7 +236,7 @@ class Info
                     $newrow['id'] = $partition['major'].':'.$partition['minor'];
                     $newrow['blocks'] = $partition['#blocks'];
                     $newrow['bytes'] = $newrow['blocks']*1024;
-                    $newrow['formated'] = Helpers::formatBytes($newrow['bytes']);
+                    $newrow['formated'] = self::formatBytes($newrow['bytes']);
 
 
                     $results[$partition['name']] = $newrow;
@@ -239,11 +254,11 @@ class Info
             foreach ($mounts as $mount) {
                 if (in_array($mount['file_system'], $this->showFileSystemTypes)) {
                     $mount['total_space_bytes'] =  disk_total_space($mount['mount']);
-                    $mount['total_space'] =  Helpers::formatBytes($mount['total_space_bytes']);
+                    $mount['total_space'] =  self::formatBytes($mount['total_space_bytes']);
                     $mount['free_space_bytes'] =  disk_free_space($mount['mount']);
-                    $mount['free_space'] =  Helpers::formatBytes($mount['free_space_bytes']);
+                    $mount['free_space'] =  self::formatBytes($mount['free_space_bytes']);
                     $mount['used_space_bytes'] = $mount['total_space_bytes'] - $mount['free_space_bytes'];
-                    $mount['used_space'] = Helpers::formatBytes($mount['used_space_bytes']);
+                    $mount['used_space'] = self::formatBytes($mount['used_space_bytes']);
                     $usage = ($mount['used_space_bytes']/$mount['total_space_bytes']) * 100 ?? 0;
                     $mount['used_percent'] = round($usage, 2);
 
@@ -538,4 +553,23 @@ class Info
         return $results ?? [];
     }
 
+    /**
+     * Format bytes to kb, mb, gb, tb
+     *
+     * @param  integer $size
+     * @param  integer $precision
+     * @return integer
+     */
+    public static function formatBytes($size, $precision = 2)
+    {
+        if ($size > 0) {
+            $size = (int) $size;
+            $base = log($size) / log(1024);
+            $suffixes = array(' bytes', ' KB', ' MB', ' GB', ' TB');
+
+            return round(pow(1024, $base - floor($base)), $precision) . $suffixes[(int)floor($base)];
+        } else {
+            return $size;
+        }
+    }
 }
