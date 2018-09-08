@@ -7,7 +7,7 @@
 [![Codecov](https://img.shields.io/codecov/c/github/danielme85/simple-server-info.svg?style=flat-square)](https://codecov.io/gh/danielme85/simple-server-info)
 
  A simple PHP 7.0+ class to provide system information about your server/system build. 🖥️ 
- Made with efficiency and simplicity in mind. 
+ Get CPU information and load. Memory and storage/volume usage and information. Made with efficiency and simplicity in mind. 
  Information is read from the virtual filesystem "/proc" on Unix systems, as such Procfs is required. 
  https://en.wikipedia.org/wiki/Procfs
  Most Linux distro's should support this. Windows and OSX is not supported... 😥
@@ -46,3 +46,9 @@ set sec (default 1 sec) pause in between.
 $cpuInfo = Info::get()->cpuInfo($core = null, ['processor', 'model_name', 'cpu_mhz', 'cache_size']);
 $cpuLoad = Info::get()->cpuLoad($sampleSec = 1, $rounding = 2);
 ```
+
+#### Memory
+
+#### Filesystem/Volumes
+
+#### System uptime
