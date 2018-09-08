@@ -1,6 +1,6 @@
 {
     "name": "danielme85/simple-server-info",
-    "description": "A simple PHP7 class to provide system information about your server/system build.",
+    "description": "A simple PHP 7.1+ class to provide system information about your server/system build.",
     "type": "library",
     "license": "MIT",
     "authors": [
@@ -11,7 +11,7 @@
     ],
     "minimum-stability": "stable",
     "require": {
-        "php": ">=7.0"
+        "php": ">=7.1"
     },
     "require-dev": {
         "phpunit/phpunit": "^7"

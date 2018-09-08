@@ -6,7 +6,7 @@
 [![Travis (.org)](https://img.shields.io/travis/danielme85/simple-server-info.svg?style=flat-square)](https://travis-ci.org/danielme85/simple-server-info)
 [![Codecov](https://img.shields.io/codecov/c/github/danielme85/simple-server-info.svg?style=flat-square)](https://codecov.io/gh/danielme85/simple-server-info)
 
-A simple PHP 7.0+ class to provide system information about your server/system build. 🖥️ 
+A simple PHP 7.1+ class to provide system information about your server/system build. 🖥️ 
 Get CPU information and load. Memory and storage/volume usage and information. Made with efficiency and simplicity in mind. 
 Information is read from the virtual filesystem "/proc" on Unix systems, as such Procfs is required. There is no usage of excec 
 or other shell commands/hacks to get to the underlying system information. All information is read from the virtual /proc filesystem.
