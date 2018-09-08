@@ -42,68 +42,56 @@ final class InfoTest extends TestCase
      * @group other
      */
     public function testOtherInfo() {
-        $other = Info::get()->otherInfo();
-        $this->assertNotEmpty($other);
+        $this->assertNotEmpty(Info::get()->otherInfo());
     }
 
     /**
      * @group cpu
      */
     public function testCpuInfo() {
-        $cpuinfo = Info::get()->cpuInfo();
-        $this->assertNotEmpty($cpuinfo);
+        $this->assertNotEmpty(Info::get()->cpuInfo());
 
         $cpuinfoless = Info::get()->cpuInfo(0, ['model_name']);
-        $this->assertNotEmpty($cpuinfoless[0]['model_name']);
+        $this->assertNotEmpty($cpuinfoless['model_name']);
     }
 
     /**
      * @group cpu
      */
     public function testCpuLoad() {
-
-        //Lets find some prime numbers.
-        for ($i = 1; $i <= 100; $i++) {
-            echo $i;
-        }
-
-        $cpuload = Info::get()->cpuLoad(2, 4);
-        var_dump($cpuload);
+        //run a small stress test.
+        exec("php PrimeStress.php > /dev/null 2>/dev/null &");
+        $cpuload = Info::get()->cpuLoad(1, 8);
+        $this->assertGreaterThan(0, $cpuload['cpu']['load']);
     }
 
+    /**
+     * @group memory
+     */
+    public function testMemoryUsageAndLoad() {
+        $this->assertNotEmpty(Info::get()->memoryUsage());
+        $memoryload = Info::get()->memoryLoad(0);
+        $this->assertGreaterThan(0, $memoryload['load']);
+    }
 
     /**
-     * used for stress test.
-     *
-     * https://stackoverflow.com/a/16763365/4824540
+     * @group memory
      */
-    private function isPrime($num) {
-        if($num == 1)
-            return false;
+    public function testMemoryInfo() {
+        $this->assertNotEmpty(Info::get()->memoryInfo());
+    }
 
-        //2 is prime (the only even number that is prime)
-        if($num == 2)
-            return true;
+    /**
+     * @group disk
+     */
+    public function testDiskInfo() {
+        $this->assertNotEmpty(Info::get()->diskInfo());
+    }
 
-        /**
-         * if the number is divisible by two, then it's not prime and it's no longer
-         * needed to check other even numbers
-         */
-        if($num % 2 == 0) {
-            return false;
-        }
-
-        /**
-         * Checks the odd numbers. If any of them is a factor, then it returns false.
-         * The sqrt can be an aproximation, hence just for the sake of
-         * security, one rounds it to the next highest integer value.
-         */
-        $ceil = ceil(sqrt($num));
-        for($i = 3; $i <= $ceil; $i = $i + 2) {
-            if($num % $i == 0)
-                return false;
-        }
-
-        return true;
+    /**
+     * @group disk
+     */
+    public function testVolumes() {
+        $this->assertNotEmpty(Info::get()->volumesInfo());
     }
 }

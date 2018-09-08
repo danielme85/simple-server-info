@@ -155,9 +155,10 @@ class Info
     /**
      * Get Memory Load
      *
+     * @param int|null rounding.
      * @return array
      */
-    public function memoryLoad() : array
+    public function memoryLoad($rounding = 2) : array
     {
         $memory = $this->getProcMemInfo();
         $total = $memory['MemTotal'];
@@ -172,8 +173,8 @@ class Info
         $swap = ($swapUsed/$totalSwap) * 100 ?? 0;
 
         return [
-            'RAM' => round($usage),
-            'Pagefile/Swap' => round($swap)
+            'load' => round($usage, $rounding),
+            'swap_load' => round($swap, $rounding)
         ];
     }
 
@@ -231,7 +232,7 @@ class Info
         return $results;
     }
 
-    public function mountedVolumesInfo() : array
+    public function volumesInfo() : array
     {
         $mounts = $this->getProcMounts();
         if (!empty($mounts)) {
