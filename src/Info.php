@@ -38,6 +38,11 @@ class Info
     private $memoryCache = null;
 
     /**
+     * @var null internal class cache of running processes for efficiency.
+     */
+    private $runningProcCache = null;
+
+    /**
      * SysInfo constructor.
      *
      * @param array|null $showFileSystemTypes Set the file system types to include.
@@ -268,6 +273,17 @@ class Info
         }
 
         return $results ?? [];
+    }
+
+
+    public function process(int $pid, array $returnonly = null) : array
+    {
+        return $this->getProcesses($pid, $returnonly);
+    }
+
+    public function processes($returnonly = null) : array
+    {
+        return $this->getProcesses(null, $returnonly);
     }
 
     /**
@@ -531,6 +547,65 @@ class Info
             'version' => $version[0] ?? null,
             'version_signature' => $versionSignature[0] ?? null
         ];
+    }
+
+
+    private function getProcesses($pid = null,  $returnonly = null)
+    {
+        if (!$results = $this->runningProcCache) {
+            $list = $this->getProcessList();
+
+            if (!empty($list)) {
+                foreach ($list as $idrow) {
+                    $results[] = $this->getProcessInfo($idrow, $returnonly);
+                }
+            }
+
+            if (!empty($results)) {
+                $this->runningProcCache = $results;
+            }
+        }
+        if (!empty($pid)) {
+            $results[$pid];
+        }
+
+        return $results ?? [];
+    }
+
+
+    private function getProcessList() : array
+    {
+        $scan = scandir($this->basePath);
+        if (!empty($scan)) {
+            foreach ($scan as $row) {
+                if (is_numeric($row)) {
+                    $processes[]=(int)$row;
+                }
+            }
+        }
+        sort($processes);
+
+        return $processes ?? [];
+    }
+
+
+    private function getProcessInfo($pid, $returnonly) : array
+    {
+        $statcontent = $this->readFileLines("$this->basePath/$pid/status");
+        if (!empty($statcontent)) {
+            foreach ($statcontent as $row) {
+                if (!empty($row)) {
+                    $keypos = strpos($row, ':');
+                    $key = trim(strtolower(str_replace(' ', '_', substr($row, 0, $keypos))));
+                    if (empty($returnonly) or in_array($key, $returnonly)) {
+                        $value = trim(str_replace(':', '', substr($row, $keypos)));
+                        $results[$key] = $value;
+                    }
+                }
+            }
+        }
+
+        return $results ?? [];
     }
 
 
