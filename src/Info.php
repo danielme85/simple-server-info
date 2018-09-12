@@ -14,6 +14,7 @@ namespace danielme85\Server;
  * https://en.wikipedia.org/wiki/Procfs
  * https://en.wikipedia.org/wiki/Load_(computing)
  * https://stackoverflow.com/questions/23367857/accurate-calculation-of-cpu-usage-given-in-percentage-in-linux
+ * https://stackoverflow.com/questions/16726779/how-do-i-get-the-total-cpu-usage-of-an-application-from-proc-pid-stat
  * https://www.systutorials.com/docs/linux/man/5-proc/
  *
  * @package danielme85\LaraStats\Models
@@ -33,15 +34,6 @@ class Info
      */
     private $showFileSystemTypes = ['ext', 'ext2', 'ext3', 'ext4', 'fat32', 'ntfs', 'vboxsf'];
 
-    /**
-     * @var null internal class cache of memory information for efficiency.
-     */
-    private $memoryCache = null;
-
-    /**
-     * @var null internal class cache of running processes for efficiency.
-     */
-    private $runningProcCache = null;
 
     /**
      * SysInfo constructor.
@@ -310,6 +302,19 @@ class Info
     }
 
     /**
+     * Get all active processes.
+     *
+     * @param array|null $returnonly An array of columns wanted. Null=all
+     * @param string|null $returntype An array of type wanted 'status' or 'stat'. Null=both.
+     * @param bool $runningonly Only return running processes.
+     * @return array
+     */
+    public function processesActive($returnonly = null, string $returntype = null) : array
+    {
+        return $this->getProcesses($returnonly, $returntype, $runningonly);
+    }
+
+    /**
      * Calculate CPU percent usage based on two sample datasets
      *
      * @param array $measure1
@@ -455,22 +460,16 @@ class Info
      */
     private function getProcMemInfo()
     {
-        if (empty($this->memoryCache)) {
-            $memory = $this->readFileLines("$this->basePath/meminfo");
-            if (!empty($memory)) {
-                foreach ($memory as $row) {
-                    if (!empty($row)) {
-                        $keypos = strpos($row, ':');
-                        $key = substr($row, 0, $keypos);
-                        $value = (int)preg_replace('/[^0-9]/', '', substr($row, $keypos)) * 1000;
-                        $results[$key] = $value;
-                    }
+        $memory = $this->readFileLines("$this->basePath/meminfo");
+        if (!empty($memory)) {
+            foreach ($memory as $row) {
+                if (!empty($row)) {
+                    $keypos = strpos($row, ':');
+                    $key = substr($row, 0, $keypos);
+                    $value = (int)preg_replace('/[^0-9]/', '', substr($row, $keypos)) * 1000;
+                    $results[$key] = $value;
                 }
             }
-
-            $this->memoryCache = $results;
-        } else {
-            $results = $this->memoryCache;
         }
 
         return $results ?? [];
@@ -582,40 +581,40 @@ class Info
      */
     private function getProcesses($returnonly = null, $returntype = null, $runningonly = false) : array
     {
-        if (!$results = $this->runningProcCache) {
-            $list = $this->getProcessList();
+        $list = $this->getProcessList();
 
-            if (!empty($list)) {
-                foreach ($list as $pid) {
-                    if ($returntype === 'stat') {
-                        $stat = $this->getProcessStats($pid, $returnonly, $runningonly);
-                        if (!empty($stat)) {
-                            $results[$pid] = $stat;
-                        }
-
+        if (!empty($list)) {
+            foreach ($list as $pid) {
+                if ($returntype === 'stat') {
+                    $stat = $this->getProcessStats($pid, $returnonly, $runningonly);
+                    if (!empty($stat)) {
+                        $results[$pid] = $stat;
                     }
-                    else if ($returntype === 'status') {
-                        $status = $this->getProcessStatus($pid, $returnonly, $runningonly);
-                        if (!empty($status)) {
-                            $results[$pid] = $status;
-                        }
-                    }
-                    else {
-                        $stat = $this->getProcessStats($pid, $returnonly, $runningonly);
-                        $status = $this->getProcessStatus($pid, $returnonly, $runningonly);
 
-                        if (!empty($status) or !empty($stats)) {
-                            $results[$pid] =  [
-                                'status' => $status,
-                                'stat'=> $stat
-                            ];
-                        }
+                } else if ($returntype === 'status') {
+                    $status = $this->getProcessStatus($pid, $returnonly, $runningonly);
+                    if (!empty($status)) {
+                        $results[$pid] = $status;
+                    }
+                } else {
+                    $stat = $this->getProcessStats($pid, $returnonly, $runningonly);
+                    $status = $this->getProcessStatus($pid, $returnonly, $runningonly);
+
+                    if (!empty($status) or !empty($stats)) {
+                        $results[$pid] = [
+                            'status' => $status,
+                            'stat' => $stat
+                        ];
                     }
                 }
             }
-
-            if (!empty($results)) {
-                $this->runningProcCache = $results;
+            if (in_array('cpu_usage', $returnonly)) {
+                $cpuUsage = $this->processesCpuUsage($runningonly);
+                if (!empty($cpuUsage)) {
+                    foreach ($cpuUsage as $pidRow => $usageRow) {
+                        $results[$pidRow]['cpu_usage'] = $usageRow;
+                    }
+                }
             }
         }
 
@@ -669,7 +668,7 @@ class Info
                 }
             }
             if (!$runningonly or $results['state'] === 'R (running)') {
-                return $results;
+                return $results ?? [];
             }
         }
 
@@ -692,7 +691,7 @@ class Info
         }
         $headers = [
             'pid', 'comm', 'state', 'ppid', 'pgrp', 'session', 'tty_nr', 'tpgid', 'flags', 'minflt', 'cminflt', 'majflt',
-            'cmajflt', 'utime', 'stime', 'stime', 'cutime', 'cstime', 'priority', 'nice', 'num_threads', 'itrealvalue',
+            'cmajflt', 'utime', 'stime', 'cutime', 'cstime', 'priority', 'nice', 'num_threads', 'itrealvalue',
             'starttime', 'vsize', 'rss', 'rsslim', 'startcode', 'endcode', 'startstack', 'kstkesp', 'kstkeip', 'signal',
             'blocked', 'sigignore', 'sigcatch', 'wchan', 'nswap', 'cnswap', 'exit_signal', 'processor', 'rt_priority',
             'policy', 'delayacct_blkio_ticks', 'guest_time', 'cguest_time'
@@ -719,6 +718,59 @@ class Info
         return $results ?? [];
     }
 
+    /**
+
+     * @return float
+     */
+    public function processesCpuUsage($runningonly = false)
+    {
+        $pidTimeFirsts = $this->processes(['pid', 'utime', 'stime', 'processor'], 'stat', $runningonly);
+        $totalTimeFirsts = $this->getProcStat();
+        sleep(1);
+        $pidTimeSecond = $this->processes(['pid', 'utime', 'stime', 'processor'], 'stat', $runningonly);
+        $totalTimeSecond= $this->getProcStat();
+
+        if (!empty($pidTimeFirsts)) {
+            foreach ($pidTimeFirsts as $pidRow) {
+                $results[(string)$pidRow['pid']] = $this->calculateProcessesCpuUsage($pidRow, $pidTimeSecond[$pidRow['pid']], $totalTimeFirsts, $totalTimeSecond);
+            }
+        }
+
+        return $results ?? [];
+    }
+
+    private function calculateProcessesCpuUsage($pidTimeFirst, $pidTimeSecond, $totalTimeFirst, $totalTimeSecond) {
+        $utimefirst = $pidTimeFirst['utime'] + $pidTimeFirst['stime'];
+        $utimesecond = $pidTimeSecond['utime'] + $pidTimeSecond['stime'];;
+
+        $cpu = $pidTimeFirst['processor'];
+
+        $totalFirst = $totalTimeFirst['cpu']["cpu$cpu"];
+        $totalSecond = $totalTimeSecond['cpu']["cpu$cpu"];
+
+        $totalFirstTime = 0;
+        $totalSecondTime = 0;
+
+        if (!empty($totalFirst)) {
+            foreach ($totalFirst as $first) {
+                $totalFirstTime += $first;
+            }
+        }
+        if (!empty($totalSecond)) {
+            foreach ($totalSecond as $second) {
+                $totalSecondTime += $second;
+            }
+        }
+
+        if ($totalTimeFirst > 0 and $totalSecondTime > 0) {
+            $usage = 100 * ($utimesecond - $utimefirst) / ($totalSecondTime - $totalFirstTime);
+        }
+        else {
+            $usage = 0;
+        }
+
+        return round($usage, 2);
+    }
 
     /**
      * Parse the text file into an array based on newline
