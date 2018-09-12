@@ -14,6 +14,7 @@ namespace danielme85\Server;
  * https://en.wikipedia.org/wiki/Procfs
  * https://en.wikipedia.org/wiki/Load_(computing)
  * https://stackoverflow.com/questions/23367857/accurate-calculation-of-cpu-usage-given-in-percentage-in-linux
+ * https://www.systutorials.com/docs/linux/man/5-proc/
  *
  * @package danielme85\LaraStats\Models
  */
@@ -275,15 +276,37 @@ class Info
         return $results ?? [];
     }
 
-
-    public function process(int $pid, array $returnonly = null) : array
+    /**
+     * @param int $pid the process pid
+     * @param array|null $returnonly An array of columns wanted. Null=all
+     * @param string|null $returntype An array of type wanted 'status' or 'stat'. Null=both.
+     * @return array
+     */
+    public function process(int $pid, array $returnonly = null, string $returntype = null) : array
     {
-        return $this->getProcesses($pid, $returnonly);
+        if ($returntype === 'stat') {
+            return $this->getProcessStats($pid, $returnonly, false);
+        }
+        if ($returntype === 'status') {
+            return $this->getProcessStatus($pid, $returnonly, false);
+        }
+        return [
+            'status' => $this->getProcessStatus($pid, $returnonly, false),
+            'stat'=> $this->getProcessStats($pid, $returnonly, false)
+            ];
     }
 
-    public function processes($returnonly = null) : array
+    /**
+     * Get all running processes.
+     *
+     * @param array|null $returnonly An array of columns wanted. Null=all
+     * @param string|null $returntype An array of type wanted 'status' or 'stat'. Null=both.
+     * @param bool $runningonly Only return running processes.
+     * @return array
+     */
+    public function processes($returnonly = null, string $returntype = null, $runningonly = false) : array
     {
-        return $this->getProcesses(null, $returnonly);
+        return $this->getProcesses($returnonly, $returntype, $runningonly);
     }
 
     /**
@@ -292,7 +315,6 @@ class Info
      * @param array $measure1
      * @param array $measure2
      * @param int $rounding
-     *
      * @return array
      */
     private function calculateCpuUsage(array $measure1, array $measure2, $rounding = 2) : array
@@ -549,15 +571,46 @@ class Info
         ];
     }
 
-
-    private function getProcesses($pid = null,  $returnonly = null)
+    /**
+     * Get all running processes.
+     *
+     * @param array|null $returnonly An array of columns wanted. Null=all
+     * @param string|null $returntype An array of type wanted 'status' or 'stat'. Null=both.
+     * @param bool $runningonly Only return running processes.
+     *
+     * @return array
+     */
+    private function getProcesses($returnonly = null, $returntype = null, $runningonly = false) : array
     {
         if (!$results = $this->runningProcCache) {
             $list = $this->getProcessList();
 
             if (!empty($list)) {
-                foreach ($list as $idrow) {
-                    $results[] = $this->getProcessInfo($idrow, $returnonly);
+                foreach ($list as $pid) {
+                    if ($returntype === 'stat') {
+                        $stat = $this->getProcessStats($pid, $returnonly, $runningonly);
+                        if (!empty($stat)) {
+                            $results[$pid] = $stat;
+                        }
+
+                    }
+                    else if ($returntype === 'status') {
+                        $status = $this->getProcessStatus($pid, $returnonly, $runningonly);
+                        if (!empty($status)) {
+                            $results[$pid] = $status;
+                        }
+                    }
+                    else {
+                        $stat = $this->getProcessStats($pid, $returnonly, $runningonly);
+                        $status = $this->getProcessStatus($pid, $returnonly, $runningonly);
+
+                        if (!empty($status) or !empty($stats)) {
+                            $results[$pid] =  [
+                                'status' => $status,
+                                'stat'=> $stat
+                            ];
+                        }
+                    }
                 }
             }
 
@@ -565,14 +618,15 @@ class Info
                 $this->runningProcCache = $results;
             }
         }
-        if (!empty($pid)) {
-            $results[$pid];
-        }
 
         return $results ?? [];
     }
 
-
+    /**
+     * Get a list of running processes by scanning /proc
+     *
+     * @return array
+     */
     private function getProcessList() : array
     {
         $scan = scandir($this->basePath);
@@ -588,9 +642,20 @@ class Info
         return $processes ?? [];
     }
 
-
-    private function getProcessInfo($pid, $returnonly) : array
+    /**
+     * Get detailed process info from /proc/{$pid}/status
+     *
+     * @param string $pid
+     * @param array|null $returnonly An array of columns wanted. Null=all
+     * @return array
+     */
+    private function getProcessStatus($pid, $returnonly, $runningonly) : array
     {
+        if ($runningonly and !empty($returnonly)) {
+            if (!in_array('state', $returnonly)) {
+                $returnonly[] = 'state';
+            }
+        }
         $statcontent = $this->readFileLines("$this->basePath/$pid/status");
         if (!empty($statcontent)) {
             foreach ($statcontent as $row) {
@@ -603,11 +668,56 @@ class Info
                     }
                 }
             }
+            if (!$runningonly or $results['state'] === 'R (running)') {
+                return $results;
+            }
         }
+
+        return [];
+    }
+
+    /**
+     * Get additional process runtime info from /proc/{$pid}/stats
+     *
+     * @param string $pid
+     * @param array|null $returnonly An array of columns wanted. Null=all
+     * @return array
+     */
+    private function getProcessStats($pid, $returnonly, $runningonly) : array
+    {
+        if ($runningonly and !empty($returnonly)) {
+            if (!in_array('state', $returnonly)) {
+                $returnonly[] = 'state';
+            }
+        }
+        $headers = [
+            'pid', 'comm', 'state', 'ppid', 'pgrp', 'session', 'tty_nr', 'tpgid', 'flags', 'minflt', 'cminflt', 'majflt',
+            'cmajflt', 'utime', 'stime', 'stime', 'cutime', 'cstime', 'priority', 'nice', 'num_threads', 'itrealvalue',
+            'starttime', 'vsize', 'rss', 'rsslim', 'startcode', 'endcode', 'startstack', 'kstkesp', 'kstkeip', 'signal',
+            'blocked', 'sigignore', 'sigcatch', 'wchan', 'nswap', 'cnswap', 'exit_signal', 'processor', 'rt_priority',
+            'policy', 'delayacct_blkio_ticks', 'guest_time', 'cguest_time'
+            ];
+
+            $statcontent = $this->readFileLines("$this->basePath/$pid/stat");
+            if (!empty($statcontent)) {
+                if (!empty($statcontent[0])) {
+                    $statArray = explode(' ', $statcontent[0]);
+                    if (!empty($statArray)) {
+                        if (!$runningonly or ($statArray[2] === 'R')) {
+                            $i = 0;
+                            foreach ($headers as $header) {
+                                if (empty($returnonly) or in_array($header, $returnonly)) {
+                                    $results[$header] = $statArray[$i] ?? null;
+                                }
+                                $i++;
+                            }
+                        }
+                    }
+                }
+            }
 
         return $results ?? [];
     }
-
 
 
     /**

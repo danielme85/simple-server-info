@@ -38,18 +38,42 @@ $memoryInfo = Info::get()->memoryInfo();
 The following information is supported.
 
 #### CPU
-The function "cpuInfo" returns an array with information about the CPU. This is per core, though most of the information
+The method "cpuInfo" returns an array with information about the CPU. This is per core, though most of the information
 is duplicated as the cores usually shares the same parent information. The array is organized and indexed with the core_id.
 To limit the information return you can specify the core and/or an array with the information you want.
-The function "cpuLoad" returns an array with the percentage load per core based on samples with a 
+The method "cpuLoad" returns an array with the percentage load per core based on samples with a 
 set sec (default 1 sec) pause in between.
 ```php
-$cpuInfo = Info::get()->cpuInfo($core = null, ['processor', 'model_name', 'cpu_mhz', 'cache_size']);
+$cpuinfo = Info::get()->cpuInfo();
+$filteredCpuInfo = Info::get()->cpuInfo($core = null, ['processor', 'model_name', 'cpu_mhz', 'cache_size']);
 $cpuLoad = Info::get()->cpuLoad($sampleSec = 1, $rounding = 2);
 ```
 
 #### Memory
+The method "memoryUsage" returns information about the current memory usage in a byte format.
+The method "memoryLoad" returns the percentage load/usage. 
+```php
+$memoryUsage = Info::get()->memoryUsage();
+$memoryLoad = Info::get()->memoryLoad();
+```
 
 #### Filesystem/Volumes
+The method "volumesInfo" returns information about the mounted file systems/volumes.
+```php
+$volumes = Info::get()->volumesInfo(),
+```
+
+#### Processes
+The methods "processes" and "process" returns information about processes currently present in the /proc system on the system.
+There are results available from both the 'stat' and 'status' virtual system files. 
+You can filter the results by passing an array of wanted columns, specify status/stat only and lastly set $runningonly = true/false. 
+```php
+$allprocs = Info::get()->processes();
+$filteredprocs = Info::get()->processes(['name', 'state', 'pid', 'ppid', 'vmpeak', 'vmsize', 'threads'], 'status', true);
+$spesifficproc = Info::get()->process($pid);
+```
 
 #### System uptime
+```php
+$uptime => Info::get()->uptime(),
+```

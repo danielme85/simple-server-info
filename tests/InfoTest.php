@@ -60,7 +60,7 @@ final class InfoTest extends TestCase
      */
     public function testCpuLoad() {
         //run a small stress test.
-        exec("php PrimeStress.php > /dev/null 2>/dev/null &");
+        exec("php ../PrimeStress.php > /dev/null 2>/dev/null &");
         $cpuload = Info::get()->cpuLoad(1, 8);
         $this->assertGreaterThan(0, $cpuload['cpu']['load']);
     }
@@ -94,5 +94,30 @@ final class InfoTest extends TestCase
      */
     public function testVolumes() {
         $this->assertNotEmpty(Info::get()->volumesInfo());
+    }
+
+    /**
+     * @group processes
+     */
+    public function testProcesses() {
+        $allprocs = Info::get()->processes();
+        $lastofall = end ($allprocs);
+
+        $this->assertNotEmpty($lastofall['stat']);
+        $this->assertNotEmpty($lastofall['status']);
+
+        //test process pid 1
+        $firstproc = Info::get()->process(1);
+        $this->assertNotEmpty($firstproc['stat']);
+        $this->assertNotEmpty($firstproc['status']);
+
+        //test filtered returns
+        $this->assertNotEmpty(Info::get()->processes(['pid']));
+        $this->assertNotEmpty(Info::get()->processes(['pid'], 'status'));
+        $this->assertNotEmpty(Info::get()->processes(['pid'], 'stat'));
+        $this->assertNotEmpty(Info::get()->processes(['pid'], 'status', true));
+        $this->assertNotEmpty(Info::get()->processes(['pid'], 'stat', true));
+        $this->assertNotEmpty(Info::get()->process(1, ['pid'], 'stat'));
+        $this->assertNotEmpty(Info::get()->process(1, ['pid'], 'status'));
     }
 }
