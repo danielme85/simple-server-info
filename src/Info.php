@@ -225,6 +225,11 @@ class Info
         return $this->getProcMemInfo() ?? [];
     }
 
+    /**
+     * Get info on disks
+     *
+     * @return mixed
+     */
     public function diskInfo() {
         $partitions = $this->getProcPartitions();
 
@@ -245,6 +250,11 @@ class Info
         return $results;
     }
 
+    /**
+     * Get info on storage volumes
+     *
+     * @return array
+     */
     public function volumesInfo() : array
     {
         $mounts = $this->getProcMounts();
@@ -309,9 +319,46 @@ class Info
      * @param bool $runningonly Only return running processes.
      * @return array
      */
-    public function processesActive($returnonly = null, string $returntype = null) : array
+    public function processesActiveOrRunning($returnonly = null, string $returntype = null) : array
     {
-        return $this->getProcesses($returnonly, $returntype, $runningonly);
+        //set min required data if we want to get active processes or running.
+        if (!in_array('cpu_usage', $returnonly)) {
+            $returnonly[] = 'cpu_usage';
+        }
+        if (!in_array('state', $returnonly)) {
+            $returnonly[] = 'state';
+        }
+
+
+        $processes = $this->getProcesses($returnonly, $returntype, false);
+
+        if (empty($returntype)) {
+            foreach ($processes as $type => $returnvalues) {
+                $results[$type] = $this->filterActiveOrRunning($returnvalues);
+            }
+        }
+        else {
+            $results = $this->filterActiveOrRunning($processes);
+        }
+
+        return $results ?? [];
+    }
+
+    /**
+     * @param $processes
+     * @return array
+     */
+    private function filterActiveOrRunning($processes) : array
+    {
+        if (!empty($processes)) {
+            foreach ($processes as $pid => $info) {
+                if ($info['cpu_usage'] > 0 or $info['state'] === 'R' or $info['state'] === 'R (running)') {
+                    $results[$pid] = $info;
+                }
+            }
+        }
+
+        return $results ?? [];
     }
 
     /**
