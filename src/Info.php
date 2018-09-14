@@ -16,6 +16,7 @@ namespace danielme85\Server;
  * https://stackoverflow.com/questions/23367857/accurate-calculation-of-cpu-usage-given-in-percentage-in-linux
  * https://stackoverflow.com/questions/16726779/how-do-i-get-the-total-cpu-usage-of-an-application-from-proc-pid-stat
  * https://www.systutorials.com/docs/linux/man/5-proc/
+ * https://gist.github.com/jkstill/5095725
  *
  * @package danielme85\LaraStats\Models
  */
@@ -33,7 +34,6 @@ class Info
      * @var array Included file system types in volumes info.
      */
     private $showFileSystemTypes = ['ext', 'ext2', 'ext3', 'ext4', 'fat32', 'ntfs', 'vboxsf'];
-
 
     /**
      * SysInfo constructor.
@@ -107,12 +107,45 @@ class Info
     }
 
     /**
+     * Get current uptime.
+     *
+     * @return array
+     */
+    private function getProcUptime() : array
+    {
+        $uptimeRaw = $this->readFileLines("$this->basePath/uptime");
+
+        if (!empty($uptimeRaw[0])) {
+            $uptimeArray = explode(' ', $uptimeRaw[0]);
+        }
+
+        return $uptimeArray ?? [];
+    }
+
+    /**
      * Get other information: OS signatures.
      *
      * @return array
      */
     public function otherInfo() {
         return $this->getProcOtherInfo();
+    }
+
+    /**
+     * Get misc other info
+     *
+     * @return array
+     */
+    private function getProcOtherInfo() : array
+    {
+
+        $version = $this->readFileLines("$this->basePath/version");
+        $versionSignature = $this->readFileLines("$this->basePath/version_signature");
+
+        return [
+            'version' => $version[0] ?? null,
+            'version_signature' => $versionSignature[0] ?? null
+        ];
     }
 
     /**
@@ -148,6 +181,98 @@ class Info
         $measure2 = $this->getProcStat();
 
         return $this->calculateCpuUsage($measure1, $measure2, $rounding);
+    }
+
+    /**
+     * Get CPU information.
+     *
+     * @param array|null $returnonly Only return column headers in this array.
+     * @return array
+     */
+    private function getProcCpuInfo(array $returnonly = null) : array
+    {
+        $cpu = 0;
+
+        $info = $this->readFileLines("$this->basePath/cpuinfo");
+        if (!empty($info)) {
+            foreach ($info as $row) {
+                if (empty($row)) {
+                    $cpu++;
+                }
+                else {
+                    $keypos = strpos($row, ':');
+                    $key = trim(strtolower(str_replace(' ', '_', substr($row, 0, $keypos))));
+                    if (empty($returnonly) or in_array($key, $returnonly)) {
+                        $value = trim(str_replace(':', '', substr($row, $keypos)));
+                        $results[$cpu][$key] = $value;
+                    }
+                }
+            }
+        }
+
+        return $results ?? [];
+    }
+
+    /**
+     *
+     * @return float
+     */
+    public function processesCpuUsage($runningonly = false)
+    {
+        $pidTimeFirsts = $this->processes(['pid', 'utime', 'stime', 'processor'], 'stat', $runningonly);
+        $totalTimeFirsts = $this->getProcStat();
+        sleep(1);
+        $pidTimeSecond = $this->processes(['pid', 'utime', 'stime', 'processor'], 'stat', $runningonly);
+        $totalTimeSecond= $this->getProcStat();
+
+        if (!empty($pidTimeFirsts)) {
+            foreach ($pidTimeFirsts as $pidRow) {
+                $results[(string)$pidRow['pid']] = $this->calculateProcessesCpuUsage($pidRow, $pidTimeSecond[$pidRow['pid']], $totalTimeFirsts, $totalTimeSecond);
+            }
+        }
+
+        return $results ?? [];
+    }
+
+    /**
+     *
+     * @param $pidTimeFirst
+     * @param $pidTimeSecond
+     * @param $totalTimeFirst
+     * @param $totalTimeSecond
+     * @return float
+     */
+    private function calculateProcessesCpuUsage($pidTimeFirst, $pidTimeSecond, $totalTimeFirst, $totalTimeSecond) {
+        $utimefirst = $pidTimeFirst['utime'] + $pidTimeFirst['stime'];
+        $utimesecond = $pidTimeSecond['utime'] + $pidTimeSecond['stime'];;
+
+        $cpu = $pidTimeFirst['processor'];
+
+        $totalFirst = $totalTimeFirst['cpu']["cpu$cpu"];
+        $totalSecond = $totalTimeSecond['cpu']["cpu$cpu"];
+
+        $totalFirstTime = 0;
+        $totalSecondTime = 0;
+
+        if (!empty($totalFirst)) {
+            foreach ($totalFirst as $first) {
+                $totalFirstTime += $first;
+            }
+        }
+        if (!empty($totalSecond)) {
+            foreach ($totalSecond as $second) {
+                $totalSecondTime += $second;
+            }
+        }
+
+        if ($totalTimeFirst > 0 and $totalSecondTime > 0) {
+            $usage = 100 * ($utimesecond - $utimefirst) / ($totalSecondTime - $totalFirstTime);
+        }
+        else {
+            $usage = 0;
+        }
+
+        return round($usage, 2);
     }
 
     /**
@@ -226,6 +351,28 @@ class Info
     }
 
     /**
+     * Get memory information.
+     *
+     * @return array|null
+     */
+    private function getProcMemInfo()
+    {
+        $memory = $this->readFileLines("$this->basePath/meminfo");
+        if (!empty($memory)) {
+            foreach ($memory as $row) {
+                if (!empty($row)) {
+                    $keypos = strpos($row, ':');
+                    $key = substr($row, 0, $keypos);
+                    $value = (int)preg_replace('/[^0-9]/', '', substr($row, $keypos)) * 1000;
+                    $results[$key] = $value;
+                }
+            }
+        }
+
+        return $results ?? [];
+    }
+
+    /**
      * Get info on disks
      *
      * @return mixed
@@ -248,6 +395,67 @@ class Info
         }
 
         return $results;
+    }
+
+    /**
+     * Get disk partition information
+     *
+     * @return array
+     */
+    private function getProcPartitions() : array
+    {
+        $partitionsRaw = $this->readFileLines("$this->basePath/partitions");
+        if (!empty($partitionsRaw)) {
+            $first = true;
+            $counter = 0;
+            foreach ($partitionsRaw as $row) {
+                if (!empty($row)) {
+                    if ($first) {
+                        $headers = explode(' ', preg_replace('!\s+!', ' ', trim($row)));
+                        $first = false;
+                    } else {
+                        $values = explode(' ', preg_replace('!\s+!', ' ', trim($row)));
+                        if (!empty($headers) and !empty($values)) {
+                            $subcounter = 0;
+                            foreach ($headers as $header) {
+                                $results[$counter][$header] = $values[$subcounter];
+                                $subcounter++;
+                            }
+                        }
+                        $counter++;
+                    }
+                }
+            }
+        }
+
+        return $results ?? [];
+    }
+
+    /**
+     * Get mounting information.
+     *
+     * @return array
+     */
+    private function getProcMounts() : array
+    {
+        $mountsRaw = $this->readFileLines("$this->basePath/mounts");
+
+        if (!empty($mountsRaw)) {
+            foreach ($mountsRaw as $row) {
+                if (!empty($row)) {
+                    $values = explode(' ', preg_replace('!\s+!', ' ', trim($row)));
+                    if (!empty($values)) {
+                        $newrow['mount'] = $values[1];
+                        $newrow['disk'] = $values[0];
+                        $newrow['file_system'] = $values[2];
+
+                        $results[] = $newrow;
+                    }
+                }
+            }
+        }
+
+        return $results ?? [];
     }
 
     /**
@@ -362,6 +570,154 @@ class Info
     }
 
     /**
+     * Get detailed process info from /proc/{$pid}/status
+     *
+     * @param string $pid
+     * @param array|null $returnonly An array of columns wanted. Null=all
+     * @return array
+     */
+    private function getProcessStatus($pid, $returnonly, $runningonly) : array
+    {
+        if ($runningonly and !empty($returnonly)) {
+            if (!in_array('state', $returnonly)) {
+                $returnonly[] = 'state';
+            }
+        }
+        $statcontent = $this->readFileLines("$this->basePath/$pid/status");
+        if (!empty($statcontent)) {
+            foreach ($statcontent as $row) {
+                if (!empty($row)) {
+                    $keypos = strpos($row, ':');
+                    $key = trim(strtolower(str_replace(' ', '_', substr($row, 0, $keypos))));
+                    if (empty($returnonly) or in_array($key, $returnonly)) {
+                        $value = trim(str_replace(':', '', substr($row, $keypos)));
+                        $results[$key] = $value;
+                    }
+                }
+            }
+            if (!$runningonly or $results['state'] === 'R (running)') {
+                return $results ?? [];
+            }
+        }
+
+        return [];
+    }
+
+    /**
+     * Get additional process runtime info from /proc/{$pid}/stats
+     *
+     * @param string $pid
+     * @param array|null $returnonly An array of columns wanted. Null=all
+     * @return array
+     */
+    private function getProcessStats($pid, $returnonly, $runningonly) : array
+    {
+        if ($runningonly and !empty($returnonly)) {
+            if (!in_array('state', $returnonly)) {
+                $returnonly[] = 'state';
+            }
+        }
+        $headers = [
+            'pid', 'comm', 'state', 'ppid', 'pgrp', 'session', 'tty_nr', 'tpgid', 'flags', 'minflt', 'cminflt', 'majflt',
+            'cmajflt', 'utime', 'stime', 'cutime', 'cstime', 'priority', 'nice', 'num_threads', 'itrealvalue',
+            'starttime', 'vsize', 'rss', 'rsslim', 'startcode', 'endcode', 'startstack', 'kstkesp', 'kstkeip', 'signal',
+            'blocked', 'sigignore', 'sigcatch', 'wchan', 'nswap', 'cnswap', 'exit_signal', 'processor', 'rt_priority',
+            'policy', 'delayacct_blkio_ticks', 'guest_time', 'cguest_time'
+        ];
+
+        $statcontent = $this->readFileLines("$this->basePath/$pid/stat");
+        if (!empty($statcontent)) {
+            if (!empty($statcontent[0])) {
+                $statArray = explode(' ', $statcontent[0]);
+                if (!empty($statArray)) {
+                    if (!$runningonly or ($statArray[2] === 'R')) {
+                        $i = 0;
+                        foreach ($headers as $header) {
+                            if (empty($returnonly) or in_array($header, $returnonly)) {
+                                $results[$header] = $statArray[$i] ?? null;
+                            }
+                            $i++;
+                        }
+                    }
+                }
+            }
+        }
+
+        return $results ?? [];
+    }
+
+    /**
+     * Get all running processes.
+     *
+     * @param array|null $returnonly An array of columns wanted. Null=all
+     * @param string|null $returntype An array of type wanted 'status' or 'stat'. Null=both.
+     * @param bool $runningonly Only return running processes.
+     *
+     * @return array
+     */
+    private function getProcesses($returnonly = null, $returntype = null, $runningonly = false) : array
+    {
+        $list = $this->getProcessList();
+
+        if (!empty($list)) {
+            foreach ($list as $pid) {
+                if ($returntype === 'stat') {
+                    $stat = $this->getProcessStats($pid, $returnonly, $runningonly);
+                    if (!empty($stat)) {
+                        $results[$pid] = $stat;
+                    }
+
+                } else if ($returntype === 'status') {
+                    $status = $this->getProcessStatus($pid, $returnonly, $runningonly);
+                    if (!empty($status)) {
+                        $results[$pid] = $status;
+                    }
+                } else {
+                    $stat = $this->getProcessStats($pid, $returnonly, $runningonly);
+                    $status = $this->getProcessStatus($pid, $returnonly, $runningonly);
+
+                    if (!empty($status) or !empty($stats)) {
+                        $results[$pid] = [
+                            'status' => $status,
+                            'stat' => $stat
+                        ];
+                    }
+                }
+            }
+            if (in_array('cpu_usage', $returnonly)) {
+                $cpuUsage = $this->processesCpuUsage($runningonly);
+                if (!empty($cpuUsage)) {
+                    foreach ($cpuUsage as $pidRow => $usageRow) {
+                        $results[$pidRow]['cpu_usage'] = $usageRow;
+                    }
+                }
+            }
+        }
+
+        return $results ?? [];
+    }
+
+    /**
+     * Get a list of running processes by scanning /proc
+     *
+     * @return array
+     */
+    private function getProcessList() : array
+    {
+        $scan = scandir($this->basePath);
+        if (!empty($scan)) {
+            foreach ($scan as $row) {
+                if (is_numeric($row)) {
+                    $processes[]=(int)$row;
+                }
+            }
+        }
+        sort($processes);
+
+        return $processes ?? [];
+    }
+
+    /**
      * Calculate CPU percent usage based on two sample datasets
      *
      * @param array $measure1
@@ -471,28 +827,27 @@ class Info
     }
 
     /**
-     * Get CPU information.
+     * Return a list of all tcp connections
      *
-     * @param array|null $returnonly Only return column headers in this array.
      * @return array
      */
-    private function getProcCpuInfo(array $returnonly = null) : array
+    public function tcpConnections() : array
     {
-        $cpu = 0;
+        $tcp = $this->getProcTcpConnections();
+        if (!empty($tcp)) {
+            foreach ($tcp as $row) {
+                $local = $this->convertTcpIpFormat($row['local_address']);
+                $newrow['local_ip'] = $local['ip'];
+                $newrow['local_port'] = $local['port'];;
 
-        $info = $this->readFileLines("$this->basePath/cpuinfo");
-        if (!empty($info)) {
-            foreach ($info as $row) {
-                if (empty($row)) {
-                    $cpu++;
-                }
-                else {
-                    $keypos = strpos($row, ':');
-                    $key = trim(strtolower(str_replace(' ', '_', substr($row, 0, $keypos))));
-                    if (empty($returnonly) or in_array($key, $returnonly)) {
-                        $value = trim(str_replace(':', '', substr($row, $keypos)));
-                        $results[$cpu][$key] = $value;
-                    }
+
+                $remote = $this->convertTcpIpFormat($row['rem_address']);
+                $newrow['remote_ip'] = $remote['ip'];
+                $newrow['remote_port'] = $remote['port'];;
+
+                //Ignore dummy connections
+                if ($newrow['local_ip'] !== '0.0.0.0' and $newrow['remote_ip'] !== '0.0.0.0') {
+                    $results[] = $newrow;
                 }
             }
         }
@@ -501,66 +856,34 @@ class Info
     }
 
     /**
-     * Get memory information.
+     * Helper for tcp connections
      *
-     * @return array|null
+     * @param $input
+     * @return array
      */
-    private function getProcMemInfo()
-    {
-        $memory = $this->readFileLines("$this->basePath/meminfo");
-        if (!empty($memory)) {
-            foreach ($memory as $row) {
-                if (!empty($row)) {
-                    $keypos = strpos($row, ':');
-                    $key = substr($row, 0, $keypos);
-                    $value = (int)preg_replace('/[^0-9]/', '', substr($row, $keypos)) * 1000;
-                    $results[$key] = $value;
-                }
-            }
-        }
+    private function convertTcpIpFormat($input) {
+        $ip = '';
+        $ip .= hexdec(substr($input, 6, 2)). '.';
+        $ip .= hexdec(substr($input, 4, 2)). '.';
+        $ip .= hexdec(substr($input, 2, 2)). '.';
+        $ip .= hexdec(substr($input, 0, 2));
+        $port = hexdec(substr($input, 9, 4));
 
-        return $results ?? [];
+        return ['ip' => $ip, 'port' => $port];
     }
 
     /**
-     * Get mounting information.
+     * Get tcp connections from /proc/net/tcp
      *
      * @return array
      */
-    private function getProcMounts() : array
+    private function getProcTcpConnections() : array
     {
-        $mountsRaw = $this->readFileLines("$this->basePath/mounts");
-
-        if (!empty($mountsRaw)) {
-            foreach ($mountsRaw as $row) {
-                if (!empty($row)) {
-                    $values = explode(' ', preg_replace('!\s+!', ' ', trim($row)));
-                    if (!empty($values)) {
-                        $newrow['mount'] = $values[1];
-                        $newrow['disk'] = $values[0];
-                        $newrow['file_system'] = $values[2];
-
-                        $results[] = $newrow;
-                    }
-                }
-            }
-        }
-
-        return $results ?? [];
-    }
-
-    /**
-     * Get disk partition information
-     *
-     * @return array
-     */
-    private function getProcPartitions() : array
-    {
-        $partitionsRaw = $this->readFileLines("$this->basePath/partitions");
-        if (!empty($partitionsRaw)) {
+        $tcp = $this->readFileLines("$this->basePath/net/tcp");
+        if (!empty($tcp)) {
             $first = true;
             $counter = 0;
-            foreach ($partitionsRaw as $row) {
+            foreach ($tcp as $row) {
                 if (!empty($row)) {
                     if ($first) {
                         $headers = explode(' ', preg_replace('!\s+!', ' ', trim($row)));
@@ -584,241 +907,79 @@ class Info
     }
 
     /**
-     * Get current uptime.
+     * Get network device statistics
      *
+     * @param array|null $returnOnly Return only these columns.
      * @return array
      */
-    private function getProcUptime() : array
+    public function networks(array $returnOnly = null) : array
     {
-        $uptimeRaw = $this->readFileLines("$this->basePath/uptime");
 
-        if (!empty($uptimeRaw[0])) {
-            $uptimeArray = explode(' ', $uptimeRaw[0]);
+        $networks1 = $this->getProcNetworkDevices($returnOnly);
+
+        if (!empty($returnOnly) and in_array('load', $returnOnly)) {
+            sleep(1);
+            $networks2 = $this->getProcNetworkDevices($returnOnly);
+            foreach ($networks2 as $i => $network) {
+                $networks2[$i]['load'] = $network['bytes'] - $networks1[$i]['bytes'];
+                $networks2[$i]['load_out'] = $network['bytes_out'] - $networks1[$i]['bytes_out'];
+
+            }
+
+            return $networks2 ?? [];
         }
 
-        return $uptimeArray ?? [];
-    }
-
-
-    /**
-     * Get misc other info
-     *
-     * @return array
-     */
-    private function getProcOtherInfo() : array
-    {
-
-        $version = $this->readFileLines("$this->basePath/version");
-        $versionSignature = $this->readFileLines("$this->basePath/version_signature");
-
-        return [
-            'version' => $version[0] ?? null,
-            'version_signature' => $versionSignature[0] ?? null
-        ];
+        return $networks1 ?? [];
     }
 
     /**
-     * Get all running processes.
+     * Get network device info from /proc/net/dev
      *
-     * @param array|null $returnonly An array of columns wanted. Null=all
-     * @param string|null $returntype An array of type wanted 'status' or 'stat'. Null=both.
-     * @param bool $runningonly Only return running processes.
-     *
+     * @param array|null $returnOnly Return only these columns.
      * @return array
      */
-    private function getProcesses($returnonly = null, $returntype = null, $runningonly = false) : array
+    private function getProcNetworkDevices($returnOnly) : array
     {
-        $list = $this->getProcessList();
-
-        if (!empty($list)) {
-            foreach ($list as $pid) {
-                if ($returntype === 'stat') {
-                    $stat = $this->getProcessStats($pid, $returnonly, $runningonly);
-                    if (!empty($stat)) {
-                        $results[$pid] = $stat;
-                    }
-
-                } else if ($returntype === 'status') {
-                    $status = $this->getProcessStatus($pid, $returnonly, $runningonly);
-                    if (!empty($status)) {
-                        $results[$pid] = $status;
-                    }
-                } else {
-                    $stat = $this->getProcessStats($pid, $returnonly, $runningonly);
-                    $status = $this->getProcessStatus($pid, $returnonly, $runningonly);
-
-                    if (!empty($status) or !empty($stats)) {
-                        $results[$pid] = [
-                            'status' => $status,
-                            'stat' => $stat
-                        ];
-                    }
-                }
-            }
-            if (in_array('cpu_usage', $returnonly)) {
-                $cpuUsage = $this->processesCpuUsage($runningonly);
-                if (!empty($cpuUsage)) {
-                    foreach ($cpuUsage as $pidRow => $usageRow) {
-                        $results[$pidRow]['cpu_usage'] = $usageRow;
-                    }
-                }
-            }
-        }
-
-        return $results ?? [];
-    }
-
-    /**
-     * Get a list of running processes by scanning /proc
-     *
-     * @return array
-     */
-    private function getProcessList() : array
-    {
-        $scan = scandir($this->basePath);
-        if (!empty($scan)) {
-            foreach ($scan as $row) {
-                if (is_numeric($row)) {
-                    $processes[]=(int)$row;
-                }
-            }
-        }
-        sort($processes);
-
-        return $processes ?? [];
-    }
-
-    /**
-     * Get detailed process info from /proc/{$pid}/status
-     *
-     * @param string $pid
-     * @param array|null $returnonly An array of columns wanted. Null=all
-     * @return array
-     */
-    private function getProcessStatus($pid, $returnonly, $runningonly) : array
-    {
-        if ($runningonly and !empty($returnonly)) {
-            if (!in_array('state', $returnonly)) {
-                $returnonly[] = 'state';
-            }
-        }
-        $statcontent = $this->readFileLines("$this->basePath/$pid/status");
-        if (!empty($statcontent)) {
-            foreach ($statcontent as $row) {
+        $ethernet = $this->readFileLines("$this->basePath/net/dev");
+        if (!empty($ethernet)) {
+            unset($ethernet[0]);
+            $first = true;
+            $counter = 0;
+            foreach ($ethernet as $row) {
                 if (!empty($row)) {
-                    $keypos = strpos($row, ':');
-                    $key = trim(strtolower(str_replace(' ', '_', substr($row, 0, $keypos))));
-                    if (empty($returnonly) or in_array($key, $returnonly)) {
-                        $value = trim(str_replace(':', '', substr($row, $keypos)));
-                        $results[$key] = $value;
-                    }
-                }
-            }
-            if (!$runningonly or $results['state'] === 'R (running)') {
-                return $results ?? [];
-            }
-        }
-
-        return [];
-    }
-
-    /**
-     * Get additional process runtime info from /proc/{$pid}/stats
-     *
-     * @param string $pid
-     * @param array|null $returnonly An array of columns wanted. Null=all
-     * @return array
-     */
-    private function getProcessStats($pid, $returnonly, $runningonly) : array
-    {
-        if ($runningonly and !empty($returnonly)) {
-            if (!in_array('state', $returnonly)) {
-                $returnonly[] = 'state';
-            }
-        }
-        $headers = [
-            'pid', 'comm', 'state', 'ppid', 'pgrp', 'session', 'tty_nr', 'tpgid', 'flags', 'minflt', 'cminflt', 'majflt',
-            'cmajflt', 'utime', 'stime', 'cutime', 'cstime', 'priority', 'nice', 'num_threads', 'itrealvalue',
-            'starttime', 'vsize', 'rss', 'rsslim', 'startcode', 'endcode', 'startstack', 'kstkesp', 'kstkeip', 'signal',
-            'blocked', 'sigignore', 'sigcatch', 'wchan', 'nswap', 'cnswap', 'exit_signal', 'processor', 'rt_priority',
-            'policy', 'delayacct_blkio_ticks', 'guest_time', 'cguest_time'
-            ];
-
-            $statcontent = $this->readFileLines("$this->basePath/$pid/stat");
-            if (!empty($statcontent)) {
-                if (!empty($statcontent[0])) {
-                    $statArray = explode(' ', $statcontent[0]);
-                    if (!empty($statArray)) {
-                        if (!$runningonly or ($statArray[2] === 'R')) {
-                            $i = 0;
+                    if ($first) {
+                        $headers = explode(' ', preg_replace('!\s+!', ' ', str_replace('|', ' ', trim($row))));
+                        $first = false;
+                        if (!empty($headers)) {
+                            $newheaders = [];
                             foreach ($headers as $header) {
-                                if (empty($returnonly) or in_array($header, $returnonly)) {
-                                    $results[$header] = $statArray[$i] ?? null;
+                                if (in_array($header, $newheaders)) {
+                                    $newheaders[] = $header.'_out';
                                 }
-                                $i++;
+                                else {
+                                    $newheaders[] = $header;
+                                }
                             }
                         }
+                    } else {
+                        $values = explode(' ', preg_replace('!\s+!', ' ', trim($row)));
+                        if (!empty($newheaders) and !empty($values)) {
+                            $subcounter = 0;
+                            foreach ($newheaders as $header) {
+                                if (empty($returnOnly) or in_array($header, $returnOnly)) {
+                                    $results[$counter][$header] = $values[$subcounter];
+                                }
+                                $subcounter++;
+                            }
+                        }
+                        $counter++;
                     }
                 }
             }
-
-        return $results ?? [];
-    }
-
-    /**
-
-     * @return float
-     */
-    public function processesCpuUsage($runningonly = false)
-    {
-        $pidTimeFirsts = $this->processes(['pid', 'utime', 'stime', 'processor'], 'stat', $runningonly);
-        $totalTimeFirsts = $this->getProcStat();
-        sleep(1);
-        $pidTimeSecond = $this->processes(['pid', 'utime', 'stime', 'processor'], 'stat', $runningonly);
-        $totalTimeSecond= $this->getProcStat();
-
-        if (!empty($pidTimeFirsts)) {
-            foreach ($pidTimeFirsts as $pidRow) {
-                $results[(string)$pidRow['pid']] = $this->calculateProcessesCpuUsage($pidRow, $pidTimeSecond[$pidRow['pid']], $totalTimeFirsts, $totalTimeSecond);
-            }
         }
 
         return $results ?? [];
     }
-
-    private function calculateProcessesCpuUsage($pidTimeFirst, $pidTimeSecond, $totalTimeFirst, $totalTimeSecond) {
-        $utimefirst = $pidTimeFirst['utime'] + $pidTimeFirst['stime'];
-        $utimesecond = $pidTimeSecond['utime'] + $pidTimeSecond['stime'];;
-
-        $cpu = $pidTimeFirst['processor'];
-
-        $totalFirst = $totalTimeFirst['cpu']["cpu$cpu"];
-        $totalSecond = $totalTimeSecond['cpu']["cpu$cpu"];
-
-        $totalFirstTime = 0;
-        $totalSecondTime = 0;
-
-        if (!empty($totalFirst)) {
-            foreach ($totalFirst as $first) {
-                $totalFirstTime += $first;
-            }
-        }
-        if (!empty($totalSecond)) {
-            foreach ($totalSecond as $second) {
-                $totalSecondTime += $second;
-            }
-        }
-
-        if ($totalTimeFirst > 0 and $totalSecondTime > 0) {
-            $usage = 100 * ($utimesecond - $utimefirst) / ($totalSecondTime - $totalFirstTime);
-        }
-        else {
-            $usage = 0;
-        }
-
-        return round($usage, 2);
-    }
-
     /**
      * Parse the text file into an array based on newline
      *
