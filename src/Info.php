@@ -560,8 +560,10 @@ class Info
     {
         if (!empty($processes)) {
             foreach ($processes as $pid => $info) {
-                if ($info['cpu_usage'] > 0 or $info['state'] === 'R' or $info['state'] === 'R (running)') {
-                    $results[$pid] = $info;
+                if (!empty($info) and isset($info['state'])) {
+                    if ($info['cpu_usage'] > 0 or $info['state'] === 'R' or $info['state'] === 'R (running)') {
+                        $results[$pid] = $info;
+                    }
                 }
             }
         }
