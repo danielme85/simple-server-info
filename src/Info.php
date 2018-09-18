@@ -829,26 +829,65 @@ class Info
     }
 
     /**
-     * Return a list of all tcp connections
+     * Return a summarized version of tcpConnections.
      *
+     * @param bool $includeLocalhost Include localhost connections. Default=false
      * @return array
      */
-    public function tcpConnections() : array
+    public function tcpConnectionsSummarized(bool $includeLocalhost = false) : array
+    {
+        $results = [];
+
+        $connections = $this->tcpConnections($includeLocalhost);
+
+        if (!empty($connections)) {
+            foreach ($connections as $connection) {
+                $hash = md5($connection['local_ip'].$connection['local_port']);
+                $results[$hash]['ip'] = $connection['local_ip'];
+                $results[$hash]['port'] = $connection['local_port'];
+                if (isset($results[$hash]['connections'])) {
+                    $results[$hash]['connections'] += 1;
+                }
+                else {
+                    $results[$hash]['connections'] = 1;
+                }
+            }
+        }
+
+        return $results;
+    }
+
+    /**
+     * Return a list of all tcp connections
+     *
+     * @param bool $includeLocalhost Include localhost connections. Default=false
+     * @return array
+     */
+    public function tcpConnections(bool $includeLocalhost = false) : array
     {
         $tcp = $this->getProcTcpConnections();
         if (!empty($tcp)) {
             foreach ($tcp as $row) {
                 $local = $this->convertTcpIpFormat($row['local_address']);
                 $newrow['local_ip'] = $local['ip'];
-                $newrow['local_port'] = $local['port'];;
-
+                $newrow['local_port'] = $local['port'];
 
                 $remote = $this->convertTcpIpFormat($row['rem_address']);
                 $newrow['remote_ip'] = $remote['ip'];
-                $newrow['remote_port'] = $remote['port'];;
+                $newrow['remote_port'] = $remote['port'];
 
+                $include = true;
                 //Ignore dummy connections
-                if ($newrow['local_ip'] !== '0.0.0.0' and $newrow['remote_ip'] !== '0.0.0.0') {
+                if ($newrow['local_ip'] === '0.0.0.0' or $newrow['remote_ip'] === '0.0.0.0') {
+                    $include = false;
+                }
+                //Ignore localhost connections
+                if (!$includeLocalhost) {
+                    if ($newrow['local_ip'] === '127.0.0.1' or $newrow['remote_ip'] === '127.0.0.1') {
+                        $include = false;
+                    }
+                }
+                if ($include) {
                     $results[] = $newrow;
                 }
             }
