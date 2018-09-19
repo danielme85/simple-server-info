@@ -292,8 +292,19 @@ class Info
         $freeSwap = $memory['SwapFree'];
         $swapUsed = $totalSwap - $freeSwap;
 
-        $usage = ($used/$total) * 100 ?? 0;
-        $swap = ($swapUsed/$totalSwap) * 100 ?? 0;
+        if ($total > 0) {
+            $usage = ($used/$total) * 100;
+        }
+        else {
+            $usage = 0;
+        }
+
+        if ($totalSwap > 0) {
+            $swap = ($swapUsed/$totalSwap) * 100;
+        }
+        else {
+            $swap = 0;
+        }
 
         return [
             'load' => round($usage, $rounding),
