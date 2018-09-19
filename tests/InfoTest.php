@@ -119,5 +119,24 @@ final class InfoTest extends TestCase
         $this->assertNotEmpty(Info::get()->processes(['pid'], 'stat', true));
         $this->assertNotEmpty(Info::get()->process(1, ['pid'], 'stat'));
         $this->assertNotEmpty(Info::get()->process(1, ['pid'], 'status'));
+
+        //Test activeOrRunning & cpi_usage load.
+        $this->assertNotEmpty(Info::get()->processesActiveOrRunning(['comm', 'state', 'pid', 'ppid','vsize', 'processor', 'cpu_usage'], 'stat'));
+
+    }
+
+    /**
+     * @group network
+     */
+    public function testNetwork() {
+        //test network interfaces, and load avg calcs
+        $this->assertNotEmpty(Info::get()->networks());
+        $this->assertNotEmpty(['face', 'bytes', 'packets' ,'packets_out', 'bytes_out', 'packets-out', 'load', 'load_out']);
+
+        //test tcp active connections
+        $this->assertNotEmpty(Info::get()->tcpConnections());
+        $this->assertNotEmpty(Info::get()->tcpConnections(false));
+        $this->assertNotEmpty(Info::get()->tcpConnectionsSummarized());
+
     }
 }

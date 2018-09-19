@@ -686,11 +686,13 @@ class Info
                     }
                 }
             }
-            if (in_array('cpu_usage', $returnonly)) {
-                $cpuUsage = $this->processesCpuUsage($runningonly);
-                if (!empty($cpuUsage)) {
-                    foreach ($cpuUsage as $pidRow => $usageRow) {
-                        $results[$pidRow]['cpu_usage'] = $usageRow;
+            if (!empty($returnonly)) {
+                if (in_array('cpu_usage', $returnonly)) {
+                    $cpuUsage = $this->processesCpuUsage($runningonly);
+                    if (!empty($cpuUsage)) {
+                        foreach ($cpuUsage as $pidRow => $usageRow) {
+                            $results[$pidRow]['cpu_usage'] = $usageRow;
+                        }
                     }
                 }
             }
