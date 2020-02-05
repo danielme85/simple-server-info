@@ -1,4 +1,4 @@
-#Simple Server Info
+# PHP Simple Server Info
 [![GitHub](https://img.shields.io/github/license/mashape/apistatus.svg?style=flat-square)](https://github.com/danielme85/simple-server-info)
 [![PHP from Packagist](https://img.shields.io/packagist/php-v/danielme85/simple-server-info.svg?style=flat-square)](https://packagist.org/packages/danielme85/simple-server-info)
 [![GitHub release](https://img.shields.io/github/release/danielme85/simple-server-info.svg?style=flat-square)](https://packagist.org/packages/danielme85/simple-server-info)
@@ -6,12 +6,16 @@
 [![Travis (.org)](https://img.shields.io/travis/danielme85/simple-server-info.svg?style=flat-square)](https://travis-ci.org/danielme85/simple-server-info)
 [![Codecov](https://img.shields.io/codecov/c/github/danielme85/simple-server-info.svg?style=flat-square)](https://codecov.io/gh/danielme85/simple-server-info)
 
-A simple PHP 7.1+ class to provide system information about your server/system build. 🖥️ 
+A simple PHP 7.1+ class to provide system information about your unix/linux server/system.
+
 Get CPU information and load. Memory and storage/volume usage and information. Made with efficiency and simplicity in mind. 
 Information is read from the virtual filesystem "/proc" on Unix systems, as such Procfs is required. There is no usage of excec 
 or other shell commands/hacks to get to the underlying system information. All information is read from the virtual /proc filesystem.
-https://en.wikipedia.org/wiki/Procfs
-Most Linux distro's should support this. Windows and OSX is not supported... 😥
+
+
+### Requirements
+* Unix/Linux OS supporting the [/proc virtual file system](https://en.wikipedia.org/wiki/Procfs).
+* PHP 7.1 or later.
  
 ### Installation
 ```
