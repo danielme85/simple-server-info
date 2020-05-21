@@ -202,7 +202,7 @@ class Info
                 else {
                     $keypos = strpos($row, ':');
                     $key = trim(strtolower(str_replace(' ', '_', substr($row, 0, $keypos))));
-                    if (empty($returnonly) or in_array($key, $returnonly)) {
+                    if (empty($returnonly) or (is_array($returnonly) && in_array($key, $returnonly))) {
                         $value = trim(str_replace(':', '', substr($row, $keypos)));
                         $results[$cpu][$key] = $value;
                     }
@@ -541,10 +541,10 @@ class Info
     public function processesActiveOrRunning($returnonly = null, string $returntype = null) : array
     {
         //set min required data if we want to get active processes or running.
-        if (!in_array('cpu_usage', $returnonly)) {
+        if (is_array($returnonly) && !in_array('cpu_usage', $returnonly)) {
             $returnonly[] = 'cpu_usage';
         }
-        if (!in_array('state', $returnonly)) {
+        if (is_array($returnonly) && !in_array('state', $returnonly)) {
             $returnonly[] = 'state';
         }
 
@@ -592,7 +592,7 @@ class Info
     private function getProcessStatus($pid, $returnonly, $runningonly) : array
     {
         if ($runningonly and !empty($returnonly)) {
-            if (!in_array('state', $returnonly)) {
+            if (is_array($returnonly) && !in_array('state', $returnonly)) {
                 $returnonly[] = 'state';
             }
         }
@@ -602,7 +602,7 @@ class Info
                 if (!empty($row)) {
                     $keypos = strpos($row, ':');
                     $key = trim(strtolower(str_replace(' ', '_', substr($row, 0, $keypos))));
-                    if (empty($returnonly) or in_array($key, $returnonly)) {
+                    if (empty($returnonly) or (is_array($returnonly) && in_array($key, $returnonly))) {
                         $value = trim(str_replace(':', '', substr($row, $keypos)));
                         $results[$key] = $value;
                     }
@@ -626,7 +626,7 @@ class Info
     private function getProcessStats($pid, $returnonly, $runningonly) : array
     {
         if ($runningonly and !empty($returnonly)) {
-            if (!in_array('state', $returnonly)) {
+            if (is_array($returnonly) && !in_array('state', $returnonly)) {
                 $returnonly[] = 'state';
             }
         }
@@ -646,7 +646,7 @@ class Info
                     if (!$runningonly or ($statArray[2] === 'R')) {
                         $i = 0;
                         foreach ($headers as $header) {
-                            if (empty($returnonly) or in_array($header, $returnonly)) {
+                            if (empty($returnonly) or (is_array($returnonly) && in_array($header, $returnonly))) {
                                 $results[$header] = $statArray[$i] ?? null;
                             }
                             $i++;
@@ -698,7 +698,7 @@ class Info
                 }
             }
             if (!empty($returnonly)) {
-                if (in_array('cpu_usage', $returnonly)) {
+                if (is_array($returnonly) && in_array('cpu_usage', $returnonly)) {
                     $cpuUsage = $this->processesCpuUsage($runningonly);
                     if (!empty($cpuUsage)) {
                         foreach ($cpuUsage as $pidRow => $usageRow) {
@@ -1020,7 +1020,7 @@ class Info
                         if (!empty($newheaders) and !empty($values)) {
                             $subcounter = 0;
                             foreach ($newheaders as $header) {
-                                if (empty($returnOnly) or in_array($header, $returnOnly)) {
+                                if (empty($returnOnly) or (is_array($returnOnly) && in_array($header, $returnOnly))) {
                                     $results[$counter][$header] = $values[$subcounter];
                                 }
                                 $subcounter++;
