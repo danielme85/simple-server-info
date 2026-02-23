@@ -1,83 +1,235 @@
 # PHP Simple Server Info
+
 [![GitHub](https://img.shields.io/github/license/mashape/apistatus.svg?style=flat-square)](https://github.com/danielme85/simple-server-info)
 [![PHP from Packagist](https://img.shields.io/packagist/php-v/danielme85/simple-server-info.svg?style=flat-square)](https://packagist.org/packages/danielme85/simple-server-info)
 [![GitHub release](https://img.shields.io/github/release/danielme85/simple-server-info.svg?style=flat-square)](https://packagist.org/packages/danielme85/simple-server-info)
 [![GitHub tag](https://img.shields.io/github/tag/danielme85/simple-server-info.svg?style=flat-square)](https://github.com/danielme85/simple-server-info)
-[![Travis (.org)](https://img.shields.io/travis/danielme85/simple-server-info.svg?style=flat-square)](https://travis-ci.org/danielme85/simple-server-info)
-[![Codecov](https://img.shields.io/codecov/c/github/danielme85/simple-server-info.svg?style=flat-square)](https://codecov.io/gh/danielme85/simple-server-info)
 
-A simple PHP 7.1+ class to provide system information about your unix/linux server/system.
+A PHP 8.1+ library that reads server and system information directly from the Linux
+[`/proc` virtual filesystem](https://en.wikipedia.org/wiki/Procfs).
 
-Get CPU information and load. Memory and storage/volume usage and information. Made with efficiency and simplicity in mind. 
-Information is read from the virtual filesystem "/proc" on Unix systems, as such Procfs is required. There is no usage of excec 
-or other shell commands/hacks to get to the underlying system information. All information is read from the virtual /proc filesystem.
+No `exec`, `shell_exec`, or other shell commands are used — all data is read from `/proc` text
+files, making this safe, portable, and easy to audit.
 
+---
 
-### Requirements
-* Unix/Linux OS supporting the [/proc virtual file system](https://en.wikipedia.org/wiki/Procfs).
-* PHP 7.1 or later.
- 
-### Installation
+## Requirements
+
+* Linux/Unix OS with [Procfs](https://en.wikipedia.org/wiki/Procfs) support (`/proc`).
+* PHP 8.1 or later.
+
+---
+
+## Installation
+
+```bash
+composer require danielme85/simple-server-info
 ```
-require danielme85/simple-server-info
-```
-Include vendor/autoload.php or however else you prefer to include stuff to your project/framework.
- 
-### Usage examples
- ```php
+
+---
+
+## Quick start
+
+```php
 use danielme85\Server\Info;
 
+// Instantiate directly
 $info = new Info();
 
-$cpuInfo = $info->cpuInfo();
-$cpuUsage = $info->cpuLoad($sampleSec = 1, $rounding = 2);
-
- ```
-Static shortcut 
-```php
-$memoryInfo = Info::get()->memoryInfo();
+// Or use the static factory for method chaining
+$cpuLoad = Info::get()->cpuLoad(sampleSec: 1, rounding: 2);
 ```
 
-### Currently supported info
-The following information is supported.
+---
 
-#### CPU
-The method "cpuInfo" returns an array with information about the CPU. This is per core, though most of the information
-is duplicated as the cores usually shares the same parent information. The array is organized and indexed with the core_id.
-To limit the information return you can specify the core and/or an array with the information you want.
-The method "cpuLoad" returns an array with the percentage load per core based on samples with a 
-set sec (default 1 sec) pause in between.
-```php
-$cpuinfo = Info::get()->cpuInfo();
-$filteredCpuInfo = Info::get()->cpuInfo($core = null, ['processor', 'model_name', 'cpu_mhz', 'cache_size']);
-$cpuLoad = Info::get()->cpuLoad($sampleSec = 1, $rounding = 2);
+## Architecture
+
+The library is organised around small, focused **Collector** classes, each responsible for a
+single concern. The `Info` class is a **facade** that delegates to the collectors while
+preserving a clean, unified API.
+
+```
+src/
+├── Contracts/
+│   └── CollectorInterface.php   # Interface implemented by every collector
+├── Collectors/
+│   ├── AbstractCollector.php    # Shared parsing helpers
+│   ├── CpuCollector.php         # CPU info & load
+│   ├── DiskCollector.php        # Disk partitions & volumes
+│   ├── MemoryCollector.php      # RAM & swap
+│   ├── NetworkCollector.php     # Network interfaces & TCP connections
+│   ├── ProcessCollector.php     # Process listing & CPU usage
+│   └── SystemCollector.php      # Uptime & kernel version
+├── Formatter.php                # Byte-formatting helper
+├── Info.php                     # Public facade
+└── ProcReader.php               # Low-level /proc file reader
 ```
 
-#### Memory
-The method "memoryUsage" returns information about the current memory usage in a byte format.
-The method "memoryLoad" returns the percentage load/usage. 
+Collectors can be used independently:
+
 ```php
-$memoryUsage = Info::get()->memoryUsage();
-$memoryLoad = Info::get()->memoryLoad();
+use danielme85\Server\ProcReader;
+use danielme85\Server\Collectors\CpuCollector;
+
+$cpu = new CpuCollector(new ProcReader());
+$load = $cpu->load(sampleSec: 1);
 ```
 
-#### Filesystem/Volumes
-The method "volumesInfo" returns information about the mounted file systems/volumes.
+Or accessed through the facade:
+
 ```php
-$volumes = Info::get()->volumesInfo(),
+$load = Info::get()->cpu()->load();
 ```
 
-#### Processes
-The methods "processes" and "process" returns information about processes currently present in the /proc system on the system.
-There are results available from both the 'stat' and 'status' virtual system files. 
-You can filter the results by passing an array of wanted columns, specify status/stat only and lastly set $runningonly = true/false. 
+---
+
+## API Reference
+
+### CPU
+
 ```php
-$allprocs = Info::get()->processes();
-$filteredprocs = Info::get()->processes(['name', 'state', 'pid', 'ppid', 'vmpeak', 'vmsize', 'threads'], 'status', true);
-$spesifficproc = Info::get()->process($pid);
+// All cores, all fields
+$cpuInfo = Info::get()->cpuInfo();
+
+// Single core, specific fields
+$core0 = Info::get()->cpuInfo(core: 0, returnonly: ['model_name', 'cpu_mhz', 'cache_size']);
+
+// Load percentage per core (samples over $sampleSec seconds)
+$cpuLoad = Info::get()->cpuLoad(sampleSec: 1, rounding: 2);
+// Returns: ['cpu' => ['label' => 'CPU', 'load' => 12.5], 'cpu0' => [...], ...]
 ```
 
-#### System uptime
+### Memory
+
 ```php
-$uptime => Info::get()->uptime(),
+// Usage summary with formatted sizes (e.g. "512.00 MB")
+$usage = Info::get()->memoryUsage();
+
+// Raw byte values
+$usageBytes = Info::get()->memoryUsage(formatSizes: false);
+
+// Percentage load
+$load = Info::get()->memoryLoad(rounding: 2);
+// Returns: ['load' => 42.5, 'swap_load' => 0.0]
+
+// Full /proc/meminfo dump (bytes)
+$all = Info::get()->memoryInfo();
+```
+
+### Disk & Volumes
+
+```php
+// Block device information from /proc/partitions
+$disks = Info::get()->diskInfo();
+
+// Mounted volume usage (filtered by filesystem type)
+$volumes = Info::get()->volumesInfo();
+
+// Customise which filesystem types to include
+$info = new Info(filesystemTypes: ['ext4', 'xfs']);
+$volumes = $info->volumesInfo();
+```
+
+### Processes
+
+```php
+// All processes (stat + status combined)
+$all = Info::get()->processes();
+
+// Single process
+$proc = Info::get()->process(pid: 1);
+
+// Filtered: specific fields, stat only, running only
+$running = Info::get()->processes(
+    returnonly: ['pid', 'comm', 'state', 'vsize'],
+    returntype: 'stat',
+    runningonly: true
+);
+
+// Active or running processes with CPU usage
+$active = Info::get()->processesActiveOrRunning(
+    returnonly: ['comm', 'state', 'pid', 'cpu_usage'],
+    returntype: 'stat'
+);
+```
+
+### Network
+
+```php
+// Network interface statistics
+$interfaces = Info::get()->networks();
+
+// With per-second load calculation (adds a 1s sleep)
+$withLoad = Info::get()->networks(returnOnly: ['face', 'bytes', 'bytes_out', 'load', 'load_out']);
+
+// TCP connections
+$connections = Info::get()->tcpConnections(includeLocalhost: false);
+
+// Summarised by local IP:port
+$summary = Info::get()->tcpConnectionsSummarized();
+```
+
+### System / Uptime
+
+```php
+$uptime = Info::get()->uptime();
+// Returns:
+// [
+//   'current_unix' => 1700000000,
+//   'uptime_unix'  => 86400,
+//   'started_unix' => 1699913600,
+//   'started'      => '2023-11-13 12:00:00',
+//   'current'      => '2023-11-14 12:00:00',
+//   'uptime'       => '1:00:00:00',
+//   'uptime_text'  => '1 days, 0 hours, 0 minutes and 0 seconds',
+// ]
+
+$info = Info::get()->otherInfo();
+// Returns: ['version' => '...', 'version_signature' => '...']
+```
+
+### Formatting helper
+
+```php
+use danielme85\Server\Formatter;
+
+echo Formatter::bytes(1073741824); // "1.00 GB"
+
+// Also available as a static method on Info for backward compatibility:
+echo Info::formatBytes(1073741824);
+```
+
+---
+
+## Extending
+
+Implement `CollectorInterface` to create a custom collector and pass a `ProcReader` instance:
+
+```php
+use danielme85\Server\Contracts\CollectorInterface;
+use danielme85\Server\Collectors\AbstractCollector;
+
+class LoadAvgCollector extends AbstractCollector implements CollectorInterface
+{
+    public function all(): array
+    {
+        $lines = $this->proc->lines('loadavg');
+        $parts = explode(' ', $lines[0] ?? '');
+
+        return [
+            '1min'  => (float) ($parts[0] ?? 0),
+            '5min'  => (float) ($parts[1] ?? 0),
+            '15min' => (float) ($parts[2] ?? 0),
+        ];
+    }
+}
+```
+
+---
+
+## Running Tests
+
+```bash
+composer install
+./vendor/bin/phpunit
 ```
