@@ -6,14 +6,16 @@ namespace danielme85\Server;
 
 use danielme85\Server\Collectors\CpuCollector;
 use danielme85\Server\Collectors\DiskCollector;
+use danielme85\Server\Collectors\GpuCollector;
 use danielme85\Server\Collectors\MemoryCollector;
 use danielme85\Server\Collectors\NetworkCollector;
 use danielme85\Server\Collectors\ProcessCollector;
 use danielme85\Server\Collectors\SystemCollector;
+use danielme85\Server\SysReader;
 
 /**
  * Facade providing a unified API for reading server/system information from
- * the Linux /proc virtual filesystem.
+ * the Linux /proc and /sys virtual filesystems.
  *
  * Each feature area is delegated to a dedicated Collector class. You can
  * also consume the collectors directly for a more focused interface.
@@ -23,15 +25,18 @@ use danielme85\Server\Collectors\SystemCollector;
  * - https://en.wikipedia.org/wiki/Load_(computing)
  * - https://www.systutorials.com/docs/linux/man/5-proc/
  */
+
 class Info
 {
     private ProcReader      $proc;
+    private SysReader       $sys;
     private SystemCollector  $system;
     private CpuCollector     $cpu;
     private MemoryCollector  $memory;
     private DiskCollector    $disk;
     private NetworkCollector $network;
     private ProcessCollector $process;
+    private GpuCollector     $gpu;
 
     /**
      * @param string[]|null $filesystemTypes File-system types to include in volume info.
@@ -40,12 +45,14 @@ class Info
     public function __construct(?array $filesystemTypes = null)
     {
         $this->proc    = new ProcReader();
+        $this->sys     = new SysReader();
         $this->system  = new SystemCollector($this->proc);
         $this->cpu     = new CpuCollector($this->proc);
         $this->memory  = new MemoryCollector($this->proc);
         $this->disk    = new DiskCollector($this->proc, $filesystemTypes ?? []);
         $this->network = new NetworkCollector($this->proc);
         $this->process = new ProcessCollector($this->proc, $this->cpu);
+        $this->gpu     = new GpuCollector($this->proc, $this->sys);
     }
 
     /**
@@ -62,12 +69,13 @@ class Info
     // Collectors (for direct, typed access)
     // -------------------------------------------------------------------------
 
-    public function cpu(): CpuCollector       { return $this->cpu; }
-    public function memory(): MemoryCollector { return $this->memory; }
-    public function disk(): DiskCollector     { return $this->disk; }
+    public function cpu(): CpuCollector         { return $this->cpu; }
+    public function memory(): MemoryCollector   { return $this->memory; }
+    public function disk(): DiskCollector       { return $this->disk; }
     public function network(): NetworkCollector { return $this->network; }
     public function processes_collector(): ProcessCollector { return $this->process; }
-    public function system(): SystemCollector { return $this->system; }
+    public function system(): SystemCollector   { return $this->system; }
+    public function gpu(): GpuCollector         { return $this->gpu; }
 
     // -------------------------------------------------------------------------
     // Backward-compatible public API
@@ -178,6 +186,15 @@ class Info
     public function tcpConnectionsSummarized(bool $includeLocalhost = false): array
     {
         return $this->network->tcpConnectionsSummarized($includeLocalhost);
+    }
+
+    /**
+     * Return info and resource usage for all detected GPUs.
+     * Keys are card names (e.g. 'card0'). Available fields depend on driver.
+     */
+    public function gpuInfo(): array
+    {
+        return $this->gpu->gpus();
     }
 
     // -------------------------------------------------------------------------

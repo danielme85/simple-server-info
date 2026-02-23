@@ -6,10 +6,14 @@ namespace danielme85\Server\Collectors;
 
 use danielme85\Server\Contracts\CollectorInterface;
 use danielme85\Server\ProcReader;
+use danielme85\Server\SysReader;
 
 abstract class AbstractCollector implements CollectorInterface
 {
-    public function __construct(protected readonly ProcReader $proc) {}
+    public function __construct(
+        protected readonly ProcReader $proc,
+        protected readonly ?SysReader $sys = null,
+    ) {}
 
     /**
      * Normalise a raw /proc key: lowercase, spaces → underscores.

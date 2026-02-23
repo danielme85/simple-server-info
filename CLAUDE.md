@@ -5,33 +5,36 @@ Guidelines for working with this codebase using Claude Code.
 ## Project overview
 
 A PHP 8.1+ library that reads Linux server/system metrics (CPU, memory, disk,
-network, processes, uptime) from the `/proc` virtual filesystem. No shell
-commands are used; all data is read from `/proc` text files.
+network, processes, uptime, GPU) from the `/proc` and `/sys` virtual filesystems.
+No shell commands are used; all data is read from virtual filesystem files.
 
 ## Architecture
 
 ```
 src/
 ├── Contracts/CollectorInterface.php   # Every collector must implement this
-├── Collectors/AbstractCollector.php   # Base class: ProcReader injection + helpers
+├── Collectors/AbstractCollector.php   # Base class: ProcReader/SysReader injection + helpers
 ├── Collectors/CpuCollector.php
 ├── Collectors/DiskCollector.php
+├── Collectors/GpuCollector.php        # GPU info & resource usage via /sys/class/drm/
 ├── Collectors/MemoryCollector.php
 ├── Collectors/NetworkCollector.php
 ├── Collectors/ProcessCollector.php
 ├── Collectors/SystemCollector.php
 ├── Formatter.php                      # Stateless byte-formatting helper
 ├── Info.php                           # Public facade — delegates to collectors
-└── ProcReader.php                     # Low-level /proc reader (no business logic)
+├── ProcReader.php                     # Low-level /proc reader (no business logic)
+└── SysReader.php                      # Low-level /sys reader (no business logic)
 ```
 
 ## Key conventions
 
 - **PHP 8.1+** — use typed properties, `readonly`, `match`, named arguments, union types.
 - **`declare(strict_types=1)`** at the top of every PHP file.
-- `ProcReader` handles all I/O. Collectors must not call `file_get_contents` or
-  `scandir` directly — use `$this->proc->lines(...)`, `->parseColumnar(...)`,
-  or `->pidList()`.
+- `ProcReader` handles all `/proc` I/O. `SysReader` handles all `/sys` I/O.
+  Collectors must not call `file_get_contents` or `scandir` directly.
+  Use `$this->proc->lines(...)`, `->parseColumnar(...)`, `->pidList()` for procfs,
+  and `$this->sys->read(...)`, `->readInt(...)`, `->listDir(...)` for sysfs.
 - `Formatter::bytes()` is the single source of truth for byte formatting.
   Do **not** duplicate formatting logic inline.
 - `Info` is a **facade only** — no business logic belongs there. Add logic to
@@ -45,7 +48,9 @@ src/
 
 1. Create `src/Collectors/MyCollector.php` extending `AbstractCollector`.
 2. Implement `CollectorInterface::all(): array`.
-3. Inject `ProcReader` via the constructor (already provided by `AbstractCollector`).
+3. `ProcReader` is always available as `$this->proc`. If your collector needs
+   sysfs access, pass a `SysReader` as the second constructor argument
+   (`parent::__construct($proc, $sys)`) — it will be available as `$this->sys`.
 4. Add a getter on `Info` (e.g. `public function myCollector(): MyCollector`).
 5. Optionally add facade convenience methods on `Info`.
 
