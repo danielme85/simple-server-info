@@ -6,10 +6,10 @@
 [![GitHub tag](https://img.shields.io/github/tag/danielme85/simple-server-info.svg?style=flat-square)](https://github.com/danielme85/simple-server-info)
 
 A PHP 8.1+ library that reads server and system information directly from the Linux
-[`/proc` virtual filesystem](https://en.wikipedia.org/wiki/Procfs).
+[`/proc`](https://en.wikipedia.org/wiki/Procfs) and `/sys` virtual filesystems.
 
-No `exec`, `shell_exec`, or other shell commands are used — all data is read from `/proc` text
-files, making this safe, portable, and easy to audit.
+No `exec`, `shell_exec`, or other shell commands are used — all data is read from virtual
+filesystem files, making this safe, portable, and easy to audit.
 
 ---
 
@@ -56,23 +56,30 @@ src/
 │   ├── AbstractCollector.php    # Shared parsing helpers
 │   ├── CpuCollector.php         # CPU info & load
 │   ├── DiskCollector.php        # Disk partitions & volumes
+│   ├── GpuCollector.php         # GPU info & resource usage
 │   ├── MemoryCollector.php      # RAM & swap
 │   ├── NetworkCollector.php     # Network interfaces & TCP connections
 │   ├── ProcessCollector.php     # Process listing & CPU usage
 │   └── SystemCollector.php      # Uptime & kernel version
 ├── Formatter.php                # Byte-formatting helper
 ├── Info.php                     # Public facade
-└── ProcReader.php               # Low-level /proc file reader
+├── ProcReader.php               # Low-level /proc file reader
+└── SysReader.php                # Low-level /sys file reader
 ```
 
 Collectors can be used independently:
 
 ```php
 use danielme85\Server\ProcReader;
+use danielme85\Server\SysReader;
 use danielme85\Server\Collectors\CpuCollector;
+use danielme85\Server\Collectors\GpuCollector;
 
 $cpu = new CpuCollector(new ProcReader());
 $load = $cpu->load(sampleSec: 1);
+
+$gpu = new GpuCollector(new ProcReader(), new SysReader());
+$gpus = $gpu->gpus();
 ```
 
 Or accessed through the facade:
@@ -188,6 +195,35 @@ $info = Info::get()->otherInfo();
 // Returns: ['version' => '...', 'version_signature' => '...']
 ```
 
+### GPU
+
+Reads GPU hardware info and resource usage from `/sys/class/drm/`. Supports AMD and
+NVIDIA (open kernel module) GPUs. Available fields depend on the installed driver —
+absent metrics are simply omitted from the output.
+
+```php
+$gpus = Info::get()->gpuInfo();
+// Returns an array keyed by card name, e.g.:
+// [
+//   'card0' => [
+//     'vendor'             => 'AMD',
+//     'vendor_id'          => '0x1002',
+//     'device_id'          => '0x687f',
+//     'vram_total'         => 8589934592,
+//     'vram_total_format'  => '8.00 GB',
+//     'vram_used'          => 1073741824,
+//     'vram_used_format'   => '1.00 GB',
+//     'vram_load'          => 12.5,
+//     'gpu_busy_percent'   => 34,
+//     'temperature_celsius'=> 62.0,
+//   ],
+// ]
+
+// Or via the typed collector:
+$gpuCollector = Info::get()->gpu();
+$gpus = $gpuCollector->gpus();
+```
+
 ### Formatting helper
 
 ```php
@@ -203,7 +239,9 @@ echo Info::formatBytes(1073741824);
 
 ## Extending
 
-Implement `CollectorInterface` to create a custom collector and pass a `ProcReader` instance:
+Extend `AbstractCollector` to create a custom collector. `ProcReader` is always injected
+as `$this->proc`. Pass a `SysReader` as the second constructor argument if your collector
+needs `/sys` access (`$this->sys`).
 
 ```php
 use danielme85\Server\Contracts\CollectorInterface;
