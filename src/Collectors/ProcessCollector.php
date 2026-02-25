@@ -53,7 +53,7 @@ class ProcessCollector extends AbstractCollector
             }
         }
 
-        if (!empty($returnOnly) && in_array('cpu_usage', $returnOnly, true)) {
+        if ($returnOnly === null || in_array('cpu_usage', $returnOnly, true)) {
             $usage = $this->processesCpuUsage($runningOnly);
             foreach ($usage as $pid => $u) {
                 $results[$pid]['cpu_usage'] = $u;
@@ -190,7 +190,15 @@ class ProcessCollector extends AbstractCollector
             return [];
         }
 
-        $parts = explode(' ', $lines[0]);
+        // The comm field (index 1) is wrapped in parentheses and may contain spaces.
+        // Find the last ')' to correctly split the remainder of the line.
+        $raw       = $lines[0];
+        $commStart = strpos($raw, '(');
+        $commEnd   = strrpos($raw, ')');
+        $pidPart   = substr($raw, 0, $commStart - 1);
+        $comm      = substr($raw, $commStart + 1, $commEnd - $commStart - 1);
+        $rest      = explode(' ', trim(substr($raw, $commEnd + 2)));
+        $parts     = array_merge([$pidPart, $comm], $rest);
 
         if ($runningOnly && ($parts[2] ?? '') !== 'R') {
             return [];
