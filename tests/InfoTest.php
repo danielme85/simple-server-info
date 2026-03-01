@@ -10,6 +10,7 @@ use danielme85\Server\Collectors\DiskCollector;
 use danielme85\Server\Collectors\MemoryCollector;
 use danielme85\Server\Collectors\NetworkCollector;
 use danielme85\Server\Collectors\ProcessCollector;
+use danielme85\Server\Collectors\GpuCollector;
 use danielme85\Server\Collectors\SystemCollector;
 
 final class InfoTest extends TestCase
@@ -58,8 +59,9 @@ final class InfoTest extends TestCase
         $this->assertInstanceOf(MemoryCollector::class,  $info->memory());
         $this->assertInstanceOf(DiskCollector::class,    $info->disk());
         $this->assertInstanceOf(NetworkCollector::class, $info->network());
-        $this->assertInstanceOf(ProcessCollector::class, $info->processes_collector());
+        $this->assertInstanceOf(ProcessCollector::class, $info->processCollector());
         $this->assertInstanceOf(SystemCollector::class,  $info->system());
+        $this->assertInstanceOf(GpuCollector::class,     $info->gpu());
     }
 
     // -------------------------------------------------------------------------
@@ -120,7 +122,8 @@ final class InfoTest extends TestCase
         // Each element is a per-core associative array
         $firstCore = reset($cpuinfo);
         $this->assertIsArray($firstCore);
-        $this->assertArrayHasKey('model_name', $firstCore);
+        // 'processor' is present on all architectures (x86, ARM, etc.)
+        $this->assertArrayHasKey('processor', $firstCore);
     }
 
     /**
@@ -130,7 +133,7 @@ final class InfoTest extends TestCase
     {
         $core0 = Info::get()->cpuInfo(0);
         $this->assertNotEmpty($core0);
-        $this->assertArrayHasKey('model_name', $core0);
+        $this->assertArrayHasKey('processor', $core0);
     }
 
     /**
@@ -138,9 +141,9 @@ final class InfoTest extends TestCase
      */
     public function testCpuInfoReturnOnly(): void
     {
-        $result = Info::get()->cpuInfo(0, ['model_name']);
-        $this->assertArrayHasKey('model_name', $result);
-        $this->assertArrayNotHasKey('cpu_mhz', $result);
+        $result = Info::get()->cpuInfo(0, ['processor']);
+        $this->assertArrayHasKey('processor', $result);
+        $this->assertCount(1, $result);
     }
 
     /**
@@ -148,7 +151,7 @@ final class InfoTest extends TestCase
      */
     public function testCpuLoad(): void
     {
-        exec('php ../PrimeStress.php > /dev/null 2>/dev/null &');
+        exec('php ' . __DIR__ . '/../PrimeStress.php > /dev/null 2>/dev/null &');
         $cpuload = Info::get()->cpuLoad(1, 2);
 
         $this->assertArrayHasKey('cpu', $cpuload);
@@ -411,6 +414,26 @@ final class InfoTest extends TestCase
             $this->assertArrayHasKey('port',        $entry);
             $this->assertArrayHasKey('connections', $entry);
             $this->assertGreaterThan(0, $entry['connections']);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // GPU
+    // -------------------------------------------------------------------------
+
+    /**
+     * @group gpu
+     */
+    public function testGpuInfo(): void
+    {
+        $gpus = Info::get()->gpuInfo();
+        $this->assertIsArray($gpus);
+
+        foreach ($gpus as $card => $info) {
+            $this->assertStringStartsWith('card', $card);
+            $this->assertArrayHasKey('vendor', $info);
+            $this->assertArrayHasKey('vendor_id', $info);
+            $this->assertArrayHasKey('device_id', $info);
         }
     }
 

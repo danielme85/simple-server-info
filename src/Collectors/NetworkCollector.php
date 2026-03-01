@@ -31,9 +31,12 @@ class NetworkCollector extends AbstractCollector
             sleep(1);
             $sample2 = $this->parseNetDev($returnOnly);
 
-            foreach ($sample2 as $i => $row) {
-                $sample2[$i]['load']     = ($row['bytes']     ?? 0) - ($sample1[$i]['bytes']     ?? 0);
-                $sample2[$i]['load_out'] = ($row['bytes_out'] ?? 0) - ($sample1[$i]['bytes_out'] ?? 0);
+            foreach ($sample2 as $ifName => $row) {
+                if (!isset($sample1[$ifName])) {
+                    continue;
+                }
+                $sample2[$ifName]['load']     = ($row['bytes']     ?? 0) - ($sample1[$ifName]['bytes']     ?? 0);
+                $sample2[$ifName]['load_out'] = ($row['bytes_out'] ?? 0) - ($sample1[$ifName]['bytes_out'] ?? 0);
             }
 
             return $sample2;
@@ -80,15 +83,15 @@ class NetworkCollector extends AbstractCollector
         $results = [];
 
         foreach ($this->tcpConnections($includeLocalhost) as $conn) {
-            $hash = md5($conn['local_ip'] . $conn['local_port']);
-            if (!isset($results[$hash])) {
-                $results[$hash] = [
+            $key = $conn['local_ip'] . ':' . $conn['local_port'];
+            if (!isset($results[$key])) {
+                $results[$key] = [
                     'ip'          => $conn['local_ip'],
                     'port'        => $conn['local_port'],
                     'connections' => 0,
                 ];
             }
-            $results[$hash]['connections']++;
+            $results[$key]['connections']++;
         }
 
         return $results;
@@ -104,7 +107,6 @@ class NetworkCollector extends AbstractCollector
         $results  = [];
         $headers  = [];
         $first    = true;
-        $counter  = 0;
 
         // First line is a description banner — skip it
         array_shift($lines);
@@ -125,12 +127,14 @@ class NetworkCollector extends AbstractCollector
             }
 
             $entry = [];
+            // Use the interface name (face column, with trailing colon stripped) as key
+            $ifName = rtrim($parts[0] ?? '', ':');
             foreach ($headers as $i => $header) {
                 if (empty($returnOnly) || in_array($header, $returnOnly, true)) {
                     $entry[$header] = $parts[$i] ?? '';
                 }
             }
-            $results[$counter++] = $entry;
+            $results[$ifName] = $entry;
         }
 
         return $results;

@@ -195,6 +195,11 @@ class ProcessCollector extends AbstractCollector
         $raw       = $lines[0];
         $commStart = strpos($raw, '(');
         $commEnd   = strrpos($raw, ')');
+
+        if ($commStart === false || $commEnd === false) {
+            return [];
+        }
+
         $pidPart   = substr($raw, 0, $commStart - 1);
         $comm      = substr($raw, $commStart + 1, $commEnd - $commStart - 1);
         $rest      = explode(' ', trim(substr($raw, $commEnd + 2)));
