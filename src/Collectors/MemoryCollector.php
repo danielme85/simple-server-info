@@ -32,8 +32,8 @@ class MemoryCollector extends AbstractCollector
             }
             $pos     = strpos($row, ':');
             $key     = trim(substr($row, 0, $pos));
-            // Values are in kB; multiply by 1000 to approximate bytes (matches original behaviour)
-            $value   = (int) preg_replace('/\D/', '', substr($row, $pos)) * 1000;
+            // Values are in kB (kibibytes); multiply by 1024 to get bytes
+            $value   = (int) preg_replace('/\D/', '', substr($row, $pos)) * 1024;
             $results[$key] = $value;
         }
 

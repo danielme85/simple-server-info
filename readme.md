@@ -4,6 +4,7 @@
 [![PHP from Packagist](https://img.shields.io/packagist/php-v/danielme85/simple-server-info.svg?style=flat-square)](https://packagist.org/packages/danielme85/simple-server-info)
 [![GitHub release](https://img.shields.io/github/release/danielme85/simple-server-info.svg?style=flat-square)](https://packagist.org/packages/danielme85/simple-server-info)
 [![GitHub tag](https://img.shields.io/github/tag/danielme85/simple-server-info.svg?style=flat-square)](https://github.com/danielme85/simple-server-info)
+[![Tests](https://github.com/danielme85/simple-server-info/actions/workflows/tests.yml/badge.svg)](https://github.com/danielme85/simple-server-info/actions/workflows/tests.yml)
 
 A PHP 8.1+ library that reads server and system information directly from the Linux
 [`/proc`](https://en.wikipedia.org/wiki/Procfs) and `/sys` virtual filesystems.
@@ -99,7 +100,7 @@ $load = Info::get()->cpu()->load();
 $cpuInfo = Info::get()->cpuInfo();
 
 // Single core, specific fields
-$core0 = Info::get()->cpuInfo(core: 0, returnonly: ['model_name', 'cpu_mhz', 'cache_size']);
+$core0 = Info::get()->cpuInfo(core: 0, returnonly: ['processor', 'cpu_mhz', 'cache_size']);
 
 // Load percentage per core (samples over $sampleSec seconds)
 $cpuLoad = Info::get()->cpuLoad(sampleSec: 1, rounding: 2);
@@ -133,6 +134,7 @@ $disks = Info::get()->diskInfo();
 $volumes = Info::get()->volumesInfo();
 
 // Customise which filesystem types to include
+// Defaults: ext, ext2, ext3, ext4, btrfs, xfs, zfs, fat32, ntfs, tmpfs, vboxsf
 $info = new Info(filesystemTypes: ['ext4', 'xfs']);
 $volumes = $info->volumesInfo();
 ```
@@ -163,7 +165,7 @@ $active = Info::get()->processesActiveOrRunning(
 ### Network
 
 ```php
-// Network interface statistics
+// Network interface statistics (keyed by interface name)
 $interfaces = Info::get()->networks();
 
 // With per-second load calculation (adds a 1s sleep)
@@ -271,3 +273,6 @@ class LoadAvgCollector extends AbstractCollector implements CollectorInterface
 composer install
 ./vendor/bin/phpunit
 ```
+
+Tests require a Linux environment with `/proc` available. CI runs automatically
+via GitHub Actions on PHP 8.1, 8.2, 8.3, and 8.4.

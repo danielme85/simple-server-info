@@ -11,7 +11,6 @@ use danielme85\Server\Collectors\MemoryCollector;
 use danielme85\Server\Collectors\NetworkCollector;
 use danielme85\Server\Collectors\ProcessCollector;
 use danielme85\Server\Collectors\SystemCollector;
-use danielme85\Server\SysReader;
 
 /**
  * Facade providing a unified API for reading server/system information from
@@ -73,7 +72,7 @@ class Info
     public function memory(): MemoryCollector   { return $this->memory; }
     public function disk(): DiskCollector       { return $this->disk; }
     public function network(): NetworkCollector { return $this->network; }
-    public function processes_collector(): ProcessCollector { return $this->process; }
+    public function processCollector(): ProcessCollector { return $this->process; }
     public function system(): SystemCollector   { return $this->system; }
     public function gpu(): GpuCollector         { return $this->gpu; }
 
@@ -87,10 +86,10 @@ class Info
         return $this->disk->filesystemTypes();
     }
 
-    /** @param bool $formated Include human-readable strings. */
-    public function uptime(bool $formated = true): array
+    /** @param bool $formatted Include human-readable strings. */
+    public function uptime(bool $formatted = true): array
     {
-        return $this->system->uptime($formated);
+        return $this->system->uptime($formatted);
     }
 
     public function otherInfo(): array

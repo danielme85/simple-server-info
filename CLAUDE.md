@@ -43,6 +43,10 @@ src/
   parameters instead of manual `array_intersect_key` calls.
 - Public API of `Info` must remain backward-compatible. If removing or renaming
   a method is necessary, deprecate it first.
+- Collector accessor methods on `Info` use **camelCase** (e.g. `processCollector()`,
+  not `processes_collector()`).
+- Network interface results are keyed by **interface name** (e.g. `'lo'`, `'eth0'`),
+  not by numeric index.
 
 ## Adding a new collector
 
@@ -53,6 +57,7 @@ src/
    (`parent::__construct($proc, $sys)`) — it will be available as `$this->sys`.
 4. Add a getter on `Info` (e.g. `public function myCollector(): MyCollector`).
 5. Optionally add facade convenience methods on `Info`.
+6. Add tests in `tests/InfoTest.php` with an appropriate `@group` annotation.
 
 ## Running tests
 
@@ -62,19 +67,28 @@ composer install
 ```
 
 Tests live in `tests/InfoTest.php`. Each test group maps to a feature area
-(`@group cpu`, `@group memory`, etc.). Tests require a Linux environment with
-a live `/proc` filesystem.
+(`@group cpu`, `@group memory`, `@group gpu`, etc.). Tests require a Linux
+environment with a live `/proc` filesystem.
+
+## CI
+
+GitHub Actions runs PHPUnit on PHP 8.1, 8.2, 8.3, and 8.4 via
+`.github/workflows/tests.yml`. There is no Travis CI config — the old
+`.travis.yml` has been removed.
 
 ## Environment notes
 
 - Tests must run on Linux with procfs available.
-- Some tests invoke `sleep(1)` internally (CPU load, network load) — this is
-  intentional and cannot be avoided without mocking the filesystem.
+- Some tests invoke `sleep(1)` internally (CPU load, process CPU usage) —
+  this is intentional and cannot be avoided without mocking the filesystem.
 - `PrimeStress.php` in the project root is used by the CPU load test to
-  generate load during measurement.
+  generate load during measurement. The test references it via `__DIR__`
+  for a reliable absolute path.
+- Tests use the `processor` key from `/proc/cpuinfo` (not `model_name`)
+  because it is present on all CPU architectures (x86, ARM, etc.).
 
 ## Composer
 
 - Minimum PHP: `8.1`
-- Dev dependency: `phpunit/phpunit ^10`
+- Dev dependency: `phpunit/phpunit >=10`
 - PSR-4 autoload root: `danielme85\Server\` → `src/`

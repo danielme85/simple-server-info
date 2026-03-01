@@ -5,7 +5,7 @@
          stopOnFailure="false">
 
     <testsuites>
-        <testsuite name="Test Suite for danielme85/simple-server-stats">
+        <testsuite name="Test Suite for danielme85/simple-server-info">
             <directory suffix=".php">./tests/</directory>
         </testsuite>
     </testsuites>

@@ -18,7 +18,11 @@ class DiskCollector extends AbstractCollector
     public function __construct(\danielme85\Server\ProcReader $proc, array $filesystemTypes = [])
     {
         parent::__construct($proc);
-        $this->filesystemTypes = $filesystemTypes ?: ['ext', 'ext2', 'ext3', 'ext4', 'fat32', 'ntfs', 'vboxsf'];
+        $this->filesystemTypes = $filesystemTypes ?: [
+            'ext', 'ext2', 'ext3', 'ext4',
+            'btrfs', 'xfs', 'zfs',
+            'fat32', 'ntfs', 'tmpfs', 'vboxsf',
+        ];
     }
 
     public function all(): array
