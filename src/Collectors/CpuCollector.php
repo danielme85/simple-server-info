@@ -133,11 +133,21 @@ class CpuCollector extends AbstractCollector
         foreach ($sample1['cpu'] ?? [] as $label => $m1) {
             $m2 = $sample2['cpu'][$label] ?? [];
 
-            $prevIdle = $m1['idle'] + $m1['guest'] + $m1['guest_nice'];
-            $lastIdle = ($m2['idle'] ?? 0) + ($m2['guest'] ?? 0) + ($m2['guest_nice'] ?? 0);
+            // iowait is idle time (CPU is not executing anything while waiting for I/O).
+            // guest/guest_nice are already included in user/nice by the kernel, so subtract
+            // them from user/nice to avoid double-counting, then add them back as explicit
+            // active fields.
+            $prevIdle = $m1['idle'] + $m1['iowait'];
+            $lastIdle = ($m2['idle'] ?? 0) + ($m2['iowait'] ?? 0);
 
-            $prevActive = $m1['user'] + $m1['nice'] + $m1['system'] + $m1['irq'] + $m1['softirq'] + $m1['steal'] + $m1['iowait'];
-            $lastActive = ($m2['user'] ?? 0) + ($m2['nice'] ?? 0) + ($m2['system'] ?? 0) + ($m2['irq'] ?? 0) + ($m2['softirq'] ?? 0) + ($m2['steal'] ?? 0) + ($m2['iowait'] ?? 0);
+            $prevActive = ($m1['user'] - $m1['guest'])
+                        + ($m1['nice'] - $m1['guest_nice'])
+                        + $m1['system'] + $m1['irq'] + $m1['softirq']
+                        + $m1['steal'] + $m1['guest'] + $m1['guest_nice'];
+            $lastActive = (($m2['user'] ?? 0) - ($m2['guest'] ?? 0))
+                        + (($m2['nice'] ?? 0) - ($m2['guest_nice'] ?? 0))
+                        + ($m2['system'] ?? 0) + ($m2['irq'] ?? 0) + ($m2['softirq'] ?? 0)
+                        + ($m2['steal'] ?? 0) + ($m2['guest'] ?? 0) + ($m2['guest_nice'] ?? 0);
 
             $prevTotal = $prevActive + $prevIdle;
             $lastTotal = $lastActive + $lastIdle;
